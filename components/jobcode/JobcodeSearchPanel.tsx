@@ -21,9 +21,10 @@ const EXAMPLE_QUERIES = [
 interface Props {
   onSearch: (params: JobcodeSearchRequest) => void;
   isSearching: boolean;
+  fullWidth?: boolean;
 }
 
-export default function JobcodeSearchPanel({ onSearch, isSearching }: Props) {
+export default function JobcodeSearchPanel({ onSearch, isSearching, fullWidth = false }: Props) {
   const [query, setQuery] = useState(EXAMPLE_QUERIES[0].text);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -55,7 +56,7 @@ export default function JobcodeSearchPanel({ onSearch, isSearching }: Props) {
   }
 
   return (
-    <div className="w-80 shrink-0 bg-hanwha-navy flex flex-col overflow-y-auto">
+    <div className={`${fullWidth ? "w-full" : "w-80 shrink-0"} bg-hanwha-navy flex flex-col overflow-y-auto`}>
       <div className="p-5 flex flex-col gap-4">
         <h2 className="text-white font-semibold text-base">입력 / 설정</h2>
 

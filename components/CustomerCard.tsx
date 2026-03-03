@@ -48,8 +48,7 @@ export default function CustomerCard({ customer, onSelect, index, isSent = false
       onClick={() => onSelect(customer)}
       className="bg-white rounded-2xl p-4 cursor-pointer shadow-card transition-all duration-200 border relative overflow-hidden"
       style={{
-        minWidth: 220,
-        maxWidth: 260,
+        width: "clamp(196px, 72vw, 260px)",
         borderColor: isSent ? "#86EFAC" : "#F3F4F6",
       }}
     >

@@ -26,53 +26,56 @@ export default function MessageBubble({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
-      className={`flex items-end gap-2 mb-4 ${isBot ? "flex-row" : "flex-row-reverse"}`}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      className={`flex items-end gap-1.5 sm:gap-2 mb-3 sm:mb-4 ${isBot ? "flex-row" : "flex-row-reverse"}`}
     >
       {/* Bot avatar */}
       {isBot && (
         <div
-          className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 shadow-sm"
-          style={{
-            background: "linear-gradient(135deg, #F37321 0%, #E06A1B 100%)",
-          }}
+          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 mb-0.5 bg-white border border-gray-200 shadow-sm"
         >
           <svg
-            width="14"
-            height="14"
+            width="17"
+            height="17"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="white"
-            strokeWidth="2"
+            stroke="#1A2B4A"
+            strokeWidth="1.8"
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <path d="M12 2a9 9 0 0 1 9 9c0 4-2.5 7.5-6.5 8.5L12 22l-2.5-2.5C5.5 18.5 3 15 3 11a9 9 0 0 1 9-9z" />
-            <circle cx="9" cy="11" r="1" fill="white" stroke="none" />
-            <circle cx="15" cy="11" r="1" fill="white" stroke="none" />
+            {/* Antenna */}
+            <line x1="12" y1="7" x2="12" y2="3" />
+            <circle cx="12" cy="2.5" r="1" fill="#1A2B4A" stroke="none" />
+            {/* Head */}
+            <rect x="4" y="7" width="16" height="13" rx="2.5" />
+            {/* Eyes */}
+            <circle cx="9" cy="12" r="1.5" fill="#1A2B4A" stroke="none" />
+            <circle cx="15" cy="12" r="1.5" fill="#1A2B4A" stroke="none" />
+            {/* Mouth */}
+            <path d="M9 16.5 Q12 15 15 16.5" strokeWidth="1.5" />
+            {/* Ear ports */}
+            <line x1="4" y1="12" x2="2" y2="12" />
+            <line x1="20" y1="12" x2="22" y2="12" />
           </svg>
         </div>
       )}
 
-      <div className={`flex flex-col gap-1 max-w-[80%] ${isBot ? "items-start" : "items-end"}`}>
+      <div className={`flex flex-col gap-1 max-w-[88%] sm:max-w-[80%] ${isBot ? "items-start" : "items-end"}`}>
         {/* Main content */}
         {message.type === "text" && (
           <div
-            className={`px-4 py-2.5 rounded-2xl shadow-sm text-sm leading-relaxed whitespace-pre-wrap ${
+            className={`px-3.5 sm:px-4 py-2.5 rounded-2xl text-[13px] sm:text-sm leading-relaxed whitespace-pre-wrap ${
               isBot
-                ? "bg-white text-hanwha-navy rounded-bl-sm border border-gray-100"
-                : "text-white rounded-br-sm"
+                ? "bg-white text-hanwha-navy rounded-bl-sm border border-gray-100 shadow-sm"
+                : "text-white rounded-br-sm shadow-sm"
             }`}
             style={
               !isBot
-                ? {
-                    background: "linear-gradient(135deg, #3D537F 0%, #2D4168 100%)",
-                  }
-                : {
-                    borderLeft: "3px solid #F37321",
-                  }
+                ? { background: "linear-gradient(135deg, #3D537F 0%, #2D4168 100%)" }
+                : undefined
             }
           >
             {message.content}
@@ -84,8 +87,7 @@ export default function MessageBubble({
           <div className="flex flex-col gap-2 w-full">
             {/* Text first */}
             <div
-              className="px-4 py-2.5 rounded-2xl rounded-bl-sm shadow-sm text-sm leading-relaxed bg-white text-hanwha-navy border border-gray-100"
-              style={{ borderLeft: "3px solid #F37321" }}
+              className="px-3.5 sm:px-4 py-2.5 rounded-2xl rounded-bl-sm shadow-sm text-[13px] sm:text-sm leading-relaxed bg-white text-hanwha-navy border border-gray-100"
             >
               {message.content}
             </div>
@@ -110,8 +112,7 @@ export default function MessageBubble({
           <div className="flex flex-col gap-2 w-full">
             {/* Text first */}
             <div
-              className="px-4 py-2.5 rounded-2xl rounded-bl-sm shadow-sm text-sm leading-relaxed bg-white text-hanwha-navy border border-gray-100"
-              style={{ borderLeft: "3px solid #F37321" }}
+              className="px-3.5 sm:px-4 py-2.5 rounded-2xl rounded-bl-sm shadow-sm text-[13px] sm:text-sm leading-relaxed bg-white text-hanwha-navy border border-gray-100"
             >
               {message.content}
             </div>

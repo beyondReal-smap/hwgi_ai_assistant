@@ -342,7 +342,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
       </AnimatePresence>
 
       {/* Chat messages area */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-6 chat-scroll relative z-10">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 chat-scroll relative z-10">
         <div className="max-w-3xl mx-auto">
           {messages.map((msg) => (
             <MessageBubble
@@ -363,23 +363,18 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
       </div>
 
       {/* Bottom input area */}
-      <div className="shrink-0 bg-white border-t border-gray-100 px-4 md:px-6 py-4 relative z-10">
+      <div className="shrink-0 bg-white border-t border-gray-100 px-3 sm:px-4 md:px-6 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:py-4 relative z-10">
         <div className="max-w-3xl mx-auto">
           {/* Quick chips */}
-          <div className="flex gap-2 mb-3 flex-wrap">
+          <div className="no-scrollbar flex gap-2 mb-3 overflow-x-auto pb-1 -mx-1 px-1 sm:mx-0 sm:px-0 sm:pb-0 sm:flex-wrap">
             {QUICK_ACTIONS.map((action) => (
               <motion.button
                 key={action.label}
-                whileHover={{ scale: 1.04, y: -1 }}
-                whileTap={{ scale: 0.96 }}
+                whileHover={{ scale: 1.03, y: -1 }}
+                whileTap={{ scale: 0.97 }}
                 onClick={() => handleUserInput(action.query)}
                 disabled={busy}
-                className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{
-                  background: "rgba(243, 115, 33, 0.06)",
-                  borderColor: "rgba(243, 115, 33, 0.25)",
-                  color: "#F37321",
-                }}
+                className="shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {action.label}
               </motion.button>
@@ -388,7 +383,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
 
           {/* Input form */}
           <form onSubmit={handleSubmit} className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 focus-within:border-hanwha-orange focus-within:bg-white transition-all duration-200 shadow-sm">
+            <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl sm:rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 focus-within:border-hanwha-orange focus-within:bg-white transition-all duration-200 shadow-sm">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" className="shrink-0">
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -400,10 +395,10 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder="고객명 또는 이벤트 유형을 검색하세요..."
                 disabled={busy}
-                className="flex-1 bg-transparent text-sm text-hanwha-navy placeholder-gray-400 outline-none disabled:opacity-50"
+                className="flex-1 bg-transparent text-[13px] sm:text-sm text-hanwha-navy placeholder-gray-400 outline-none disabled:opacity-50"
               />
               {inputValue && (
-                <button type="button" onClick={() => setInputValue("")} className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none">
+                <button type="button" onClick={() => setInputValue("")} className="text-gray-400 hover:text-gray-600 transition-colors text-base sm:text-lg leading-none">
                   ×
                 </button>
               )}
@@ -414,7 +409,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
               disabled={!inputValue.trim() || busy}
               whileHover={inputValue.trim() && !busy ? { scale: 1.05 } : {}}
               whileTap={inputValue.trim() && !busy ? { scale: 0.95 } : {}}
-              className="w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm transition-all duration-200 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-sm transition-all duration-200 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
               style={{
                 background: inputValue.trim() && !busy
                   ? "linear-gradient(135deg, #F37321 0%, #E06A1B 100%)"
@@ -428,7 +423,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
             </motion.button>
           </form>
 
-          <p className="text-center text-xs text-gray-400 mt-2">
+          <p className="hidden sm:block text-center text-xs text-gray-400 mt-2">
             한화손해보험 AI 영업비서 · AI 생성 메시지는 발송 전 반드시 검토하세요
           </p>
         </div>
@@ -452,7 +447,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.95 }}
             transition={{ duration: 0.3, type: "spring", stiffness: 260, damping: 20 }}
-            className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-modal flex items-center gap-3 text-sm font-semibold text-white"
+            className="fixed left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md sm:w-auto bottom-[calc(4.8rem+env(safe-area-inset-bottom))] sm:bottom-28 px-4 sm:px-5 py-3 rounded-2xl shadow-modal flex items-center gap-2 sm:gap-3 text-sm font-semibold text-white"
             style={{
               background: "linear-gradient(135deg, #1A2B4A 0%, #2D4168 100%)",
               border: "1px solid rgba(243,115,33,0.3)",

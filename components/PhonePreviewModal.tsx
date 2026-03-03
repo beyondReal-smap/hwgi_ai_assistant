@@ -112,13 +112,13 @@ export default function PhonePreviewModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 20 }}
             transition={{ duration: 0.35, type: "spring", stiffness: 260, damping: 22 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+            className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto pointer-events-none"
           >
-            <div className="pointer-events-auto w-full max-w-md">
+            <div className="pointer-events-auto w-full max-w-md my-3 sm:my-0">
               <div className="bg-white rounded-3xl shadow-modal overflow-hidden">
                 {/* Modal header */}
                 <div
-                  className="flex items-center justify-between px-6 py-4"
+                  className="flex items-center justify-between px-4 sm:px-6 py-4"
                   style={{
                     background: "linear-gradient(135deg, #1A2B4A 0%, #2D4168 100%)",
                   }}
@@ -140,7 +140,7 @@ export default function PhonePreviewModal({
                 </div>
 
                 {/* Phone frame */}
-                <div className="flex justify-center py-6 bg-gray-50">
+                <div className="flex justify-center py-4 sm:py-6 bg-gray-50">
                   <div className={`transition-opacity duration-300 ${isRegenerating ? "opacity-40" : "opacity-100"}`}>
                     <PhoneFrame
                       message={currentMessage}
@@ -153,7 +153,7 @@ export default function PhonePreviewModal({
                 </div>
 
                 {/* Message info */}
-                <div className="px-6 py-3 border-t border-gray-100 bg-white">
+                <div className="px-4 sm:px-6 py-3 border-t border-gray-100 bg-white">
                   <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
                     <InfoBadge icon="👤" text={`수신: ${customer.name} 고객`} />
                     <InfoBadge icon="📱" text={getCustomerPhone(customer)} />
@@ -167,13 +167,13 @@ export default function PhonePreviewModal({
 
                 {/* Error message */}
                 {regenError && (
-                  <div className="px-6 py-2 bg-red-50">
+                  <div className="px-4 sm:px-6 py-2 bg-red-50">
                     <p className="text-xs text-red-500">{regenError}</p>
                   </div>
                 )}
 
                 {/* Action buttons */}
-                <div className="px-6 pb-6 pt-4 space-y-2.5">
+                <div className="px-4 sm:px-6 pb-5 sm:pb-6 pt-4 space-y-2.5">
                   {/* Send button - primary */}
                   <motion.button
                     whileHover={{ scale: 1.02 }}
@@ -263,10 +263,7 @@ function PhoneFrame({
   customerPhone: string;
 }) {
   return (
-    <div
-      className="relative w-64 bg-black rounded-[40px] shadow-2xl overflow-hidden"
-      style={{ minHeight: 480, padding: "12px 8px" }}
-    >
+    <div className="relative w-[14.5rem] sm:w-64 min-h-[420px] sm:min-h-[480px] bg-black rounded-[40px] shadow-2xl overflow-hidden pt-[12px] px-[8px] pb-[12px]">
       {/* Phone notch */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 w-24 h-5 bg-black rounded-full z-10 flex items-center justify-center">
         <div className="w-2.5 h-2.5 rounded-full bg-gray-800 border border-gray-700" />

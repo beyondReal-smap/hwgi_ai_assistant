@@ -31,7 +31,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="h-full overflow-hidden bg-[#F0F4F8]">{children}</body>
+      <body className="min-h-[100dvh] overflow-hidden bg-[#F0F4F8]">{children}</body>
     </html>
   );
 }

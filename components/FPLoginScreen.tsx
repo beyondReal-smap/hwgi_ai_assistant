@@ -23,7 +23,7 @@ export default function FPLoginScreen({
   const disabled = isLoading || Boolean(loadError);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-100 flex items-center justify-center px-4">
+    <div className="relative min-h-[100dvh] overflow-hidden bg-slate-100 flex items-center justify-center px-4">
       <div
         className="absolute inset-0"
         style={{

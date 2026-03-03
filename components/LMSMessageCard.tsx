@@ -56,7 +56,7 @@ export default function LMSMessageCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.1 }}
       className="bg-white rounded-2xl border border-gray-100 shadow-card overflow-hidden"
-      style={{ minWidth: 240, maxWidth: 290 }}
+      style={{ width: "clamp(210px, 76vw, 290px)" }}
     >
       {/* Type badge header */}
       <div

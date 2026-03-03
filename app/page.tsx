@@ -18,6 +18,7 @@ export default function Home() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [currentFP, setCurrentFP] = useState<FPProfile | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [showLoginLoading, setShowLoginLoading] = useState(false);
   const [loginLoadingDone, setLoginLoadingDone] = useState(false);
 
@@ -71,41 +72,41 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (isLoadingAccounts || currentFP || accounts.length === 0) return;
+    if (isLoadingAccounts || currentFP) return;
+
+    // No accounts loaded yet (or load failed) — nothing to validate against.
+    if (accounts.length === 0) {
+      setSessionChecked(true);
+      return;
+    }
 
     const savedEmployeeId = window.localStorage.getItem(FP_SESSION_KEY);
-    if (!savedEmployeeId) return;
+    if (!savedEmployeeId) {
+      setSessionChecked(true);
+      return;
+    }
 
     const savedAccount = accounts.find(
       (account) => account.employeeId === savedEmployeeId
     );
     if (!savedAccount) {
       window.localStorage.removeItem(FP_SESSION_KEY);
+      setSessionChecked(true);
       return;
     }
 
     const { password: _, ...savedProfile } = savedAccount;
     setCurrentFP(savedProfile);
+    setSessionChecked(true);
   }, [accounts, isLoadingAccounts, currentFP]);
 
+  // Clean up splash state on logout.
   useEffect(() => {
     if (!currentFP) {
       setShowLoginLoading(false);
       setLoginLoadingDone(false);
-      return;
     }
-
-    setShowLoginLoading(true);
-    setLoginLoadingDone(false);
-
-    const doneTimer = setTimeout(() => setLoginLoadingDone(true), 3000);
-    const removeTimer = setTimeout(() => setShowLoginLoading(false), 3700);
-
-    return () => {
-      clearTimeout(doneTimer);
-      clearTimeout(removeTimer);
-    };
-  }, [currentFP?.employeeId]);
+  }, [currentFP]);
 
   const handleLogin = (employeeId: string, password: string) => {
     setAuthError(null);
@@ -117,6 +118,13 @@ export default function Home() {
       return;
     }
 
+    // Set splash state BEFORE setCurrentFP so React batches both into one render,
+    // preventing a one-frame flash of the main content.
+    setShowLoginLoading(true);
+    setLoginLoadingDone(false);
+    setTimeout(() => setLoginLoadingDone(true), 3000);
+    setTimeout(() => setShowLoginLoading(false), 3700);
+
     setCurrentFP(profile);
     window.localStorage.setItem(FP_SESSION_KEY, profile.employeeId);
   };
@@ -126,6 +134,11 @@ export default function Home() {
     setAuthError(null);
     window.localStorage.removeItem(FP_SESSION_KEY);
   };
+
+  // Session check in progress — show blank to prevent login screen flash during navigation.
+  if (!currentFP && !sessionChecked) {
+    return <div className="fixed inset-0 bg-[#F0F4F8]" />;
+  }
 
   if (!currentFP) {
     return (
@@ -148,11 +161,7 @@ export default function Home() {
         />
       )}
 
-      <div
-        className={`flex flex-col h-screen transition-opacity duration-500 ${
-          showLoginLoading ? "opacity-0" : "opacity-100"
-        }`}
-      >
+      <div className="flex flex-col h-[100dvh]">
         <AppHeader currentFP={currentFP} onLogout={handleLogout} />
 
         <div className="flex flex-1 min-h-0 overflow-hidden">
