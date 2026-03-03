@@ -112,13 +112,13 @@ export default function PhonePreviewModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 20 }}
             transition={{ duration: 0.35, type: "spring", stiffness: 260, damping: 22 }}
-            className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto pointer-events-none"
+            className="fixed inset-x-0 top-0 bottom-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-3 sm:py-4 pointer-events-none"
           >
-            <div className="pointer-events-auto w-full max-w-md my-3 sm:my-0">
-              <div className="bg-white rounded-3xl shadow-modal overflow-hidden">
-                {/* Modal header */}
+            <div className="pointer-events-auto w-full max-w-md flex flex-col" style={{ maxHeight: "calc(100dvh - 1.5rem)" }}>
+              <div className="bg-white rounded-3xl shadow-modal overflow-hidden flex flex-col min-h-0">
+                {/* Modal header — always visible */}
                 <div
-                  className="flex items-center justify-between px-4 sm:px-6 py-4"
+                  className="flex items-center justify-between px-4 sm:px-6 py-4 shrink-0"
                   style={{
                     background: "linear-gradient(135deg, #1A2B4A 0%, #2D4168 100%)",
                   }}
@@ -139,105 +139,108 @@ export default function PhonePreviewModal({
                   </button>
                 </div>
 
-                {/* Phone frame */}
-                <div className="flex justify-center py-4 sm:py-6 bg-gray-50">
-                  <div className={`transition-opacity duration-300 ${isRegenerating ? "opacity-40" : "opacity-100"}`}>
-                    <PhoneFrame
-                      message={currentMessage}
-                      timeStr={timeStr}
-                      dateStr={dateStr}
-                      customerName={customer.name}
-                      customerPhone={getCustomerPhone(customer)}
-                    />
+                {/* Scrollable body */}
+                <div className="overflow-y-auto flex-1 min-h-0">
+                  {/* Phone frame */}
+                  <div className="flex justify-center py-4 sm:py-6 bg-gray-50">
+                    <div className={`transition-opacity duration-300 ${isRegenerating ? "opacity-40" : "opacity-100"}`}>
+                      <PhoneFrame
+                        message={currentMessage}
+                        timeStr={timeStr}
+                        dateStr={dateStr}
+                        customerName={customer.name}
+                        customerPhone={getCustomerPhone(customer)}
+                      />
+                    </div>
                   </div>
-                </div>
 
-                {/* Message info */}
-                <div className="px-4 sm:px-6 py-3 border-t border-gray-100 bg-white">
-                  <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
-                    <InfoBadge icon="👤" text={`수신: ${customer.name} 고객`} />
-                    <InfoBadge icon="📱" text={getCustomerPhone(customer)} />
-                    <InfoBadge icon="📋" text={currentMessage.type} />
-                    <InfoBadge
-                      icon="📏"
-                      text={`${currentMessage.content.length}자`}
-                    />
+                  {/* Message info */}
+                  <div className="px-4 sm:px-6 py-3 border-t border-gray-100 bg-white">
+                    <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
+                      <InfoBadge icon="👤" text={`수신: ${customer.name} 고객`} />
+                      <InfoBadge icon="📱" text={getCustomerPhone(customer)} />
+                      <InfoBadge icon="📋" text={currentMessage.type} />
+                      <InfoBadge
+                        icon="📏"
+                        text={`${currentMessage.content.length}자`}
+                      />
+                    </div>
                   </div>
-                </div>
 
-                {/* Error message */}
-                {regenError && (
-                  <div className="px-4 sm:px-6 py-2 bg-red-50">
-                    <p className="text-xs text-red-500">{regenError}</p>
-                  </div>
-                )}
+                  {/* Error message */}
+                  {regenError && (
+                    <div className="px-4 sm:px-6 py-2 bg-red-50">
+                      <p className="text-xs text-red-500">{regenError}</p>
+                    </div>
+                  )}
 
-                {/* Action buttons */}
-                <div className="px-4 sm:px-6 pb-5 sm:pb-6 pt-4 space-y-2.5">
-                  {/* Send button - primary */}
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => {
-                      openSmsApp(getCustomerPhone(customer), currentMessage.content);
-                      onSend(currentMessage);
-                    }}
-                    disabled={isRegenerating}
-                    className="w-full py-3.5 rounded-2xl text-white font-bold text-sm shadow-glow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, #F37321 0%, #E06A1B 100%)",
-                    }}
-                  >
-                    📤 발송하기
-                  </motion.button>
-
-                  {/* Regenerate button */}
-                  <motion.button
-                    whileHover={!isRegenerating ? { scale: 1.02 } : {}}
-                    whileTap={!isRegenerating ? { scale: 0.97 } : {}}
-                    onClick={handleRegenerate}
-                    disabled={isRegenerating}
-                    className="w-full py-3 rounded-2xl text-sm font-semibold border transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    style={{
-                      borderColor: isRegenerating ? "#D1D5DB" : "rgba(243,115,33,0.4)",
-                      color: isRegenerating ? "#9CA3AF" : "#F37321",
-                      background: isRegenerating
-                        ? "#F9FAFB"
-                        : "rgba(243,115,33,0.04)",
-                    }}
-                  >
-                    {isRegenerating ? (
-                      <>
-                        <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                        새 내용 생성 중...
-                      </>
-                    ) : (
-                      <>
-                        🔄 메시지 재생성
-                        <span className="text-xs font-normal opacity-60">
-                          (같은 형태, 새 내용)
-                        </span>
-                      </>
-                    )}
-                  </motion.button>
-
-                  {/* Secondary buttons */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={onEdit}
+                  {/* Action buttons */}
+                  <div className="px-4 sm:px-6 pb-5 sm:pb-6 pt-4 space-y-2.5">
+                    {/* Send button - primary */}
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => {
+                        openSmsApp(getCustomerPhone(customer), currentMessage.content);
+                        onSend(currentMessage);
+                      }}
                       disabled={isRegenerating}
-                      className="py-3 rounded-2xl text-hanwha-navy text-sm font-semibold border border-gray-200 hover:border-hanwha-orange hover:text-hanwha-orange transition-all bg-white disabled:opacity-50"
+                      className="w-full py-3.5 rounded-2xl text-white font-bold text-sm shadow-glow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, #F37321 0%, #E06A1B 100%)",
+                      }}
                     >
-                      ✏️ 수정하기
-                    </button>
-                    <button
-                      onClick={onChooseOther}
+                      📤 발송하기
+                    </motion.button>
+
+                    {/* Regenerate button */}
+                    <motion.button
+                      whileHover={!isRegenerating ? { scale: 1.02 } : {}}
+                      whileTap={!isRegenerating ? { scale: 0.97 } : {}}
+                      onClick={handleRegenerate}
                       disabled={isRegenerating}
-                      className="py-3 rounded-2xl text-gray-500 text-sm font-semibold border border-gray-200 hover:border-gray-400 transition-all bg-white disabled:opacity-50"
+                      className="w-full py-3 rounded-2xl text-sm font-semibold border transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      style={{
+                        borderColor: isRegenerating ? "#D1D5DB" : "rgba(243,115,33,0.4)",
+                        color: isRegenerating ? "#9CA3AF" : "#F37321",
+                        background: isRegenerating
+                          ? "#F9FAFB"
+                          : "rgba(243,115,33,0.04)",
+                      }}
                     >
-                      ↩ 다른 메시지
-                    </button>
+                      {isRegenerating ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          새 내용 생성 중...
+                        </>
+                      ) : (
+                        <>
+                          🔄 메시지 재생성
+                          <span className="text-xs font-normal opacity-60">
+                            (같은 형태, 새 내용)
+                          </span>
+                        </>
+                      )}
+                    </motion.button>
+
+                    {/* Secondary buttons */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={onEdit}
+                        disabled={isRegenerating}
+                        className="py-3 rounded-2xl text-hanwha-navy text-sm font-semibold border border-gray-200 hover:border-hanwha-orange hover:text-hanwha-orange transition-all bg-white disabled:opacity-50"
+                      >
+                        ✏️ 수정하기
+                      </button>
+                      <button
+                        onClick={onChooseOther}
+                        disabled={isRegenerating}
+                        className="py-3 rounded-2xl text-gray-500 text-sm font-semibold border border-gray-200 hover:border-gray-400 transition-all bg-white disabled:opacity-50"
+                      >
+                        ↩ 다른 메시지
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
