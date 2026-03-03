@@ -34,7 +34,7 @@ export default function FPLoginScreen({
 
       <div className="relative z-10 w-full max-w-md rounded-3xl shadow-xl border border-white/70 bg-white/90 backdrop-blur-sm p-7">
         <div className="flex items-center gap-3 mb-6">
-          <img src="/hwgi.png" alt="한화손해보험" className="h-9 object-contain" />
+          <img src="/hwgi_black.png" alt="한화손해보험" className="h-12 object-contain" />
           <div className="w-px h-5 bg-slate-300" />
           <p className="text-sm font-semibold text-slate-700">FP 로그인</p>
         </div>

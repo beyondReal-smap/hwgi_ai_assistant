@@ -68,7 +68,7 @@ export default function LoginLoadingScreen({
         className="relative w-full max-w-md rounded-3xl border border-white/80 bg-white/88 backdrop-blur-sm p-7 shadow-[0_18px_45px_rgba(26,43,74,0.16)]"
       >
         <div className="flex items-center gap-3">
-          <img src="/hwgi.png" alt="한화손해보험" className="h-9 object-contain" />
+          <img src="/hwgi_black.png" alt="한화손해보험" className="h-12 object-contain" />
           <div className="w-px h-5 bg-slate-300" />
           <p className="text-sm font-semibold text-slate-700">AI 영업비서 준비 중</p>
         </div>

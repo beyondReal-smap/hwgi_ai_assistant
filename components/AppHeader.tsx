@@ -90,7 +90,7 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
           <img
             src="/hwgi.png"
             alt="한화손해보험"
-            className="h-6 object-contain shrink-0 brightness-0 invert"
+            className="h-14 object-contain shrink-0"
           />
           <div className="flex-1 min-w-0" />
           <div className="flex items-center gap-1 bg-emerald-500/20 border border-emerald-500/30 rounded-full px-2 py-0.5 shrink-0">
@@ -152,7 +152,7 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
           <img
             src="/hwgi.png"
             alt="한화손해보험"
-            className="h-8 object-contain shrink-0 brightness-0 invert"
+            className="h-10 object-contain shrink-0"
           />
           <div className="w-px h-5 bg-white/20 mx-1 shrink-0" />
           <nav className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
