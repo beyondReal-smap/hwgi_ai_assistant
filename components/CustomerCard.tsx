@@ -46,7 +46,7 @@ export default function CustomerCard({ customer, onSelect, index, isSent = false
       whileHover={{ y: -3, boxShadow: "0 8px 24px 0 rgba(26, 43, 74, 0.14)" }}
       whileTap={{ scale: 0.98 }}
       onClick={() => onSelect(customer)}
-      className="bg-white rounded-2xl p-4 cursor-pointer shadow-card transition-all duration-200 border relative overflow-hidden"
+      className={`bg-white rounded-2xl p-4 cursor-pointer shadow-card transition-all duration-200 border relative overflow-hidden ${isSent ? "pt-7" : ""}`}
       style={{
         width: "clamp(196px, 72vw, 260px)",
         borderColor: isSent ? "#86EFAC" : "#F3F4F6",

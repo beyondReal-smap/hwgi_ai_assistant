@@ -145,7 +145,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
   }, []);
 
   useEffect(() => {
@@ -374,7 +374,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
                 whileTap={{ scale: 0.97 }}
                 onClick={() => handleUserInput(action.query)}
                 disabled={busy}
-                className="shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium border border-orange-200 bg-orange-50 text-hanwha-orange hover:bg-orange-100 hover:border-orange-300 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {action.label}
               </motion.button>
