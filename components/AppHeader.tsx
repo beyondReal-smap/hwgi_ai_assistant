@@ -113,7 +113,8 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
   const [currentDateShort, setCurrentDateShort] = useState("");
   const [internalLoggedIn, setInternalLoggedIn] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const profileRef = useRef<HTMLDivElement>(null);
+  const profileRefMobile = useRef<HTMLDivElement>(null);
+  const profileRefDesktop = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const syncDate = () => {
@@ -141,7 +142,11 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
   useEffect(() => {
     if (!showProfile) return;
     const handleClick = (e: MouseEvent) => {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        !profileRefMobile.current?.contains(target) &&
+        !profileRefDesktop.current?.contains(target)
+      ) {
         setShowProfile(false);
       }
     };
@@ -158,32 +163,11 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
     }
   };
 
-  // Avatar button + dropdown (shared between mobile & desktop)
-  const avatarButton = currentFP ? (
-    <div className="relative shrink-0" ref={profileRef}>
-      <button
-        onClick={() => setShowProfile((v) => !v)}
-        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white text-[10px] sm:text-xs font-bold transition-all"
-        style={{
-          background: "linear-gradient(135deg, #F37321 0%, #E06A1B 100%)",
-          outline: showProfile
-            ? "2px solid rgba(243,115,33,0.6)"
-            : "2px solid rgba(255,255,255,0.2)",
-          outlineOffset: "2px",
-        }}
-        aria-label="내 프로필"
-      >
-        {currentFP.profileInitials}
-      </button>
-      {showProfile && (
-        <ProfileDropdown
-          fp={currentFP}
-          onLogout={handleLogout}
-          onClose={() => setShowProfile(false)}
-        />
-      )}
-    </div>
-  ) : null;
+  const avatarButtonStyle = {
+    background: "linear-gradient(135deg, #F37321 0%, #E06A1B 100%)",
+    outline: showProfile ? "2px solid rgba(243,115,33,0.6)" : "2px solid rgba(255,255,255,0.2)",
+    outlineOffset: "2px",
+  };
 
   return (
     <header className="bg-hanwha-navy relative z-30 shrink-0">
@@ -206,8 +190,21 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
           <span className="text-[11px] text-white/50 font-medium shrink-0">
             {currentDateShort}
           </span>
-          {avatarButton}
-          {/* Fallback logout for pages without FP context */}
+          {currentFP && (
+            <div className="relative shrink-0" ref={profileRefMobile}>
+              <button
+                onClick={() => setShowProfile((v) => !v)}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold transition-all"
+                style={avatarButtonStyle}
+                aria-label="내 프로필"
+              >
+                {currentFP.profileInitials}
+              </button>
+              {showProfile && (
+                <ProfileDropdown fp={currentFP} onLogout={handleLogout} onClose={() => setShowProfile(false)} />
+              )}
+            </div>
+          )}
           {!currentFP && internalLoggedIn && (
             <button
               onClick={handleLogout}
@@ -315,8 +312,21 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-white/50 text-xs">시스템 정상</span>
           <div className="w-px h-5 bg-white/20" />
-          {avatarButton}
-          {/* Fallback logout for pages without FP context */}
+          {currentFP && (
+            <div className="relative shrink-0" ref={profileRefDesktop}>
+              <button
+                onClick={() => setShowProfile((v) => !v)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold transition-all"
+                style={avatarButtonStyle}
+                aria-label="내 프로필"
+              >
+                {currentFP.profileInitials}
+              </button>
+              {showProfile && (
+                <ProfileDropdown fp={currentFP} onLogout={handleLogout} onClose={() => setShowProfile(false)} />
+              )}
+            </div>
+          )}
           {!currentFP && internalLoggedIn && (
             <button
               onClick={handleLogout}
