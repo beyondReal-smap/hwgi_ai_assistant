@@ -186,7 +186,7 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
   ) : null;
 
   return (
-    <header className="bg-hanwha-navy z-10 shrink-0">
+    <header className="bg-hanwha-navy relative z-30 shrink-0">
       {/* ── Mobile header ── */}
       <div className="sm:hidden">
         {/* Row 1 — fixed height 40px */}
