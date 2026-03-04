@@ -130,9 +130,13 @@ export default function PhonePreviewModal({
                   </div>
                   <button
                     onClick={onClose}
-                    className="w-8 h-8 rounded-full flex items-center justify-center bg-white/10 hover:bg-white/20 transition-colors text-white"
+                    className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/10 hover:bg-white/20 active:bg-white/30 transition-colors text-white/80 hover:text-white"
+                    aria-label="닫기"
                   >
-                    ✕
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <line x1="1" y1="1" x2="13" y2="13" />
+                      <line x1="13" y1="1" x2="1" y2="13" />
+                    </svg>
                   </button>
                 </div>
 

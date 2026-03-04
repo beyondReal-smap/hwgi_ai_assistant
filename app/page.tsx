@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import AppHeader from "@/components/AppHeader";
 import LoginLoadingScreen from "@/components/LoginLoadingScreen";
+import LogoutScreen from "@/components/LogoutScreen";
 import Sidebar from "@/components/Sidebar";
 import ChatWindow from "@/components/ChatWindow";
 import FPLoginScreen from "@/components/FPLoginScreen";
@@ -21,6 +22,10 @@ export default function Home() {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [showLoginLoading, setShowLoginLoading] = useState(false);
   const [loginLoadingDone, setLoginLoadingDone] = useState(false);
+  const [showLogoutScreen, setShowLogoutScreen] = useState(false);
+  const [logoutScreenLeaving, setLogoutScreenLeaving] = useState(false);
+  // Store FP name separately so logout screen can still show it after currentFP clears
+  const [logoutFPName, setLogoutFPName] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -100,7 +105,7 @@ export default function Home() {
     setSessionChecked(true);
   }, [accounts, isLoadingAccounts, currentFP]);
 
-  // Clean up splash state on logout.
+  // Clean up login splash only (logout splash is managed by handleLogout timeouts).
   useEffect(() => {
     if (!currentFP) {
       setShowLoginLoading(false);
@@ -130,9 +135,24 @@ export default function Home() {
   };
 
   const handleLogout = () => {
-    setCurrentFP(null);
+    if (!currentFP) return;
     setAuthError(null);
+    setLogoutFPName(currentFP.name);
     window.localStorage.removeItem(FP_SESSION_KEY);
+
+    // Show logout screen immediately while main content is still visible
+    setShowLogoutScreen(true);
+    setLogoutScreenLeaving(false);
+
+    // After 1200ms: start fade AND switch to login screen simultaneously.
+    // LogoutScreen (z-50 fixed) fades over 350ms on top of the login screen.
+    setTimeout(() => {
+      setLogoutScreenLeaving(true);
+      setCurrentFP(null);
+    }, 1200);
+
+    // After fade completes (1200 + 400ms buffer), hide the logout screen entirely.
+    setTimeout(() => setShowLogoutScreen(false), 1650);
   };
 
   // Session check in progress — show blank to prevent login screen flash during navigation.
@@ -140,35 +160,41 @@ export default function Home() {
     return <div className="fixed inset-0 bg-[#F0F4F8]" />;
   }
 
-  if (!currentFP) {
-    return (
-      <FPLoginScreen
-        isLoading={isLoadingAccounts}
-        accountCount={accounts.length}
-        loadError={loadError}
-        authError={authError}
-        onLogin={handleLogin}
-      />
-    );
-  }
-
   return (
     <>
-      {showLoginLoading && (
-        <LoginLoadingScreen
-          fpName={currentFP.name}
-          isLeaving={loginLoadingDone}
-        />
+      {/* Logout screen — rendered outside login/main branches so it persists
+          as an overlay while transitioning from main → login screen */}
+      {showLogoutScreen && (
+        <LogoutScreen fpName={logoutFPName} isLeaving={logoutScreenLeaving} />
       )}
 
-      <div className="flex flex-col h-[100dvh]">
-        <AppHeader currentFP={currentFP} onLogout={handleLogout} />
+      {!currentFP ? (
+        <FPLoginScreen
+          isLoading={isLoadingAccounts}
+          accountCount={accounts.length}
+          loadError={loadError}
+          authError={authError}
+          onLogin={handleLogin}
+        />
+      ) : (
+        <>
+          {showLoginLoading && (
+            <LoginLoadingScreen
+              fpName={currentFP.name}
+              isLeaving={loginLoadingDone}
+            />
+          )}
 
-        <div className="flex flex-1 min-h-0 overflow-hidden">
-          <Sidebar fpProfile={currentFP} />
-          <ChatWindow fpProfile={currentFP} />
-        </div>
-      </div>
+          <div className="flex flex-col h-[100dvh]">
+            <AppHeader currentFP={currentFP} onLogout={handleLogout} />
+
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+              <Sidebar fpProfile={currentFP} />
+              <ChatWindow fpProfile={currentFP} />
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }
