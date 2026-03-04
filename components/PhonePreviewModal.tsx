@@ -4,13 +4,10 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { LMSMessage, Customer } from "@/lib/types";
 
-/** customer.phone 없으면 ID 기반으로 데모 번호 생성 */
+/** customer.phone 없으면 기본 번호 반환 */
 function getCustomerPhone(customer: Customer): string {
   if (customer.phone) return customer.phone;
-  const n = parseInt(customer.id.replace(/\D/g, ""), 10) || 1;
-  const mid = String(1000 + (n * 73) % 9000).padStart(4, "0");
-  const last = String(1000 + (n * 137) % 9000).padStart(4, "0");
-  return `010-${mid}-${last}`;
+  return "010-1111-1111";
 }
 
 /** iOS / Android 양쪽에서 동작하는 SMS URI 열기 */
