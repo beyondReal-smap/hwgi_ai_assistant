@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import type { Customer, LMSMessage } from "@/lib/types";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+
+function getOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
 
 const FP_NAME = "김한화";
 const FP_PHONE = "010-1111-1111";
@@ -46,7 +46,7 @@ ${productList}
 /** gpt-5-mini 등 신규 모델용: Responses API 사용 */
 async function callResponsesAPI(prompt: string): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response = await (openai as any).responses.create({
+  const response = await (getOpenAI() as any).responses.create({
     model: MODEL,
     input: prompt,
   });
@@ -66,7 +66,7 @@ async function callResponsesAPI(prompt: string): Promise<string> {
 
 /** 구형 모델용: Chat Completions API 사용 */
 async function callChatAPI(prompt: string): Promise<string> {
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: MODEL,
     messages: [{ role: "user", content: prompt }],
     max_completion_tokens: 1500,

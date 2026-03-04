@@ -2,10 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import type { Customer, LMSMessage } from "@/lib/types";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-5.2-chat-latest";
 
 const FP_NAME = "김한화";
@@ -75,7 +71,7 @@ async function callResponsesAPI(prompt: string): Promise<string> {
 
 /** 구형 모델용: Chat Completions API 사용 */
 async function callChatAPI(prompt: string): Promise<string> {
-  const completion = await openai.chat.completions.create({
+  const completion = await new OpenAI({ apiKey: process.env.OPENAI_API_KEY }).chat.completions.create({
     model: MODEL,
     messages: [{ role: "user", content: prompt }],
     max_completion_tokens: 800,
