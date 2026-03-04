@@ -51,7 +51,7 @@ ${existingContent}
 /** gpt-5-mini 등 신규 모델용: Responses API 사용 */
 async function callResponsesAPI(prompt: string): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response = await (openai as any).responses.create({
+  const response = await (new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) as any).responses.create({
     model: MODEL,
     input: prompt,
   });
