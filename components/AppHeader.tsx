@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FPProfile } from "@/lib/types";
 
 const NAV_ITEMS: { label: string; href: string; comingSoon?: boolean }[] = [
@@ -36,6 +36,71 @@ function getDateLabels(now: Date) {
   return { full, short };
 }
 
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-gray-400 shrink-0">{label}</span>
+      <span className="text-gray-700 font-medium text-right">{value}</span>
+    </div>
+  );
+}
+
+function ProfileDropdown({
+  fp,
+  onLogout,
+  onClose,
+}: {
+  fp: FPProfile;
+  onLogout: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="absolute right-0 top-full mt-2 w-60 bg-white rounded-2xl shadow-modal border border-gray-100 overflow-hidden z-50">
+      {/* Profile header */}
+      <div
+        className="px-4 py-4"
+        style={{ background: "linear-gradient(135deg, #1A2B4A 0%, #2D4168 100%)" }}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
+            style={{ background: "linear-gradient(135deg, #F37321 0%, #E06A1B 100%)" }}
+          >
+            {fp.profileInitials}
+          </div>
+          <div className="min-w-0">
+            <p className="text-white font-bold text-sm leading-tight">{fp.name} FP</p>
+            <p className="text-white/60 text-xs leading-tight mt-0.5">
+              {fp.level} · {fp.branch}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Info rows */}
+      <div className="px-4 py-3 space-y-2 text-xs border-b border-gray-100">
+        <InfoRow label="사번" value={fp.employeeId} />
+        <InfoRow label="경력" value={`${fp.yearsOfExperience}년`} />
+        {fp.phone && <InfoRow label="연락처" value={fp.phone} />}
+        {fp.email && <InfoRow label="이메일" value={fp.email} />}
+      </div>
+
+      {/* Logout */}
+      <div className="px-4 py-3">
+        <button
+          onClick={() => {
+            onLogout();
+            onClose();
+          }}
+          className="w-full py-2 rounded-xl text-xs font-semibold text-red-500 border border-red-100 hover:bg-red-50 active:bg-red-100 transition-colors"
+        >
+          로그아웃
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface AppHeaderProps {
   currentFP?: FPProfile | null;
   onLogout?: () => void;
@@ -47,6 +112,8 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
   const [currentDate, setCurrentDate] = useState("");
   const [currentDateShort, setCurrentDateShort] = useState("");
   const [internalLoggedIn, setInternalLoggedIn] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const syncDate = () => {
@@ -70,7 +137,17 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
     }
   }, [currentFP]);
 
-  const showLogout = !!(currentFP && onLogout) || internalLoggedIn;
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!showProfile) return;
+    const handleClick = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setShowProfile(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showProfile]);
 
   const handleLogout = () => {
     if (onLogout) {
@@ -80,6 +157,33 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
       router.push("/");
     }
   };
+
+  // Avatar button + dropdown (shared between mobile & desktop)
+  const avatarButton = currentFP ? (
+    <div className="relative shrink-0" ref={profileRef}>
+      <button
+        onClick={() => setShowProfile((v) => !v)}
+        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white text-[10px] sm:text-xs font-bold transition-all"
+        style={{
+          background: "linear-gradient(135deg, #F37321 0%, #E06A1B 100%)",
+          outline: showProfile
+            ? "2px solid rgba(243,115,33,0.6)"
+            : "2px solid rgba(255,255,255,0.2)",
+          outlineOffset: "2px",
+        }}
+        aria-label="내 프로필"
+      >
+        {currentFP.profileInitials}
+      </button>
+      {showProfile && (
+        <ProfileDropdown
+          fp={currentFP}
+          onLogout={handleLogout}
+          onClose={() => setShowProfile(false)}
+        />
+      )}
+    </div>
+  ) : null;
 
   return (
     <header className="bg-hanwha-navy z-10 shrink-0">
@@ -102,7 +206,9 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
           <span className="text-[11px] text-white/50 font-medium shrink-0">
             {currentDateShort}
           </span>
-          {showLogout && (
+          {avatarButton}
+          {/* Fallback logout for pages without FP context */}
+          {!currentFP && internalLoggedIn && (
             <button
               onClick={handleLogout}
               className="h-7 px-2.5 text-[10px] font-medium rounded-md border border-white/20 text-white/60 hover:bg-white/10 active:bg-white/20 transition-colors whitespace-nowrap shrink-0"
@@ -208,20 +314,10 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
           </div>
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-white/50 text-xs">시스템 정상</span>
-          {currentFP && (
-            <>
-              <div className="hidden xl:block w-px h-5 bg-white/20" />
-              <div className="hidden xl:block text-right">
-                <p className="text-xs font-semibold text-white leading-tight">
-                  {currentFP.name} FP
-                </p>
-                <p className="text-[11px] text-white/50 leading-tight">
-                  {currentFP.branch}
-                </p>
-              </div>
-            </>
-          )}
-          {showLogout && (
+          <div className="w-px h-5 bg-white/20" />
+          {avatarButton}
+          {/* Fallback logout for pages without FP context */}
+          {!currentFP && internalLoggedIn && (
             <button
               onClick={handleLogout}
               className="px-2.5 py-1.5 text-xs font-medium rounded-md border border-white/20 text-white/60 hover:bg-white/10 transition-colors whitespace-nowrap"

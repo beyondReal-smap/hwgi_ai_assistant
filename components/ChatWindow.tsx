@@ -153,7 +153,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, scrollToBottom]);
+  }, [messages, isTyping, scrollToBottom]);
 
   useEffect(() => {
     setMessages([createGreetingMessage(fpProfile)]);
@@ -453,15 +453,15 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 16, scale: 0.95 }}
               transition={{ duration: 0.3, type: "spring", stiffness: 260, damping: 20 }}
-              className="fixed left-1/2 -translate-x-1/2 z-[9999] w-[calc(100%-1.5rem)] max-w-sm bottom-6 px-4 py-3 rounded-2xl flex items-center gap-2 text-sm font-semibold text-white"
+              className="fixed inset-x-3 mx-auto z-[9999] max-w-sm bottom-6 px-4 py-3 rounded-2xl flex items-center gap-2 text-sm font-semibold text-white"
               style={{
                 background: "linear-gradient(135deg, #1A2B4A 0%, #2D4168 100%)",
                 border: "1px solid rgba(243,115,33,0.3)",
                 boxShadow: "0 12px 40px rgba(26,43,74,0.3)",
               }}
             >
-              <span>✅</span>
-              <span>{toast.msg}</span>
+              <span className="shrink-0">✅</span>
+              <span className="min-w-0 break-keep leading-snug">{toast.msg}</span>
             </motion.div>
           )}
         </AnimatePresence>,
