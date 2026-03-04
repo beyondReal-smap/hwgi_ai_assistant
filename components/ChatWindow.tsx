@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ChatMessage, Customer, FPProfile, LMSMessage } from "@/lib/types";
 import { CUSTOMERS, LMS_MESSAGES } from "@/lib/data";
+import { track } from "@/lib/analytics";
 import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
 import PhonePreviewModal from "./PhonePreviewModal";
@@ -184,6 +185,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
 
   const handleUserInput = (query: string) => {
     if (!query.trim() || isTyping) return;
+    track("chat_send", { query });
     addUserMessage(query);
     setInputValue("");
     setIsTyping(true);
@@ -202,6 +204,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
 
   const handleCustomerSelect = useCallback(async (customer: Customer) => {
     if (isGenerating) return;
+    track("customer_select", { customerId: customer.id, name: customer.name, event: customer.event });
     setIsGenerating(true);
 
     addUserMessage(`${customer.name} 고객님의 정보를 확인하고 LMS 메시지를 작성해 주세요.`);
@@ -264,6 +267,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
   }, [isGenerating, addUserMessage, addBotMessage]);
 
   const handleLMSSelect = (lms: LMSMessage, customer: Customer) => {
+    track("lms_select", { messageType: lms.type, customerId: customer.id });
     setSelectedLMS(lms);
     setSelectedCustomerForModal(customer);
     setShowModal(true);
@@ -271,6 +275,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
 
   const handleSend = (message: LMSMessage) => {
     if (!selectedCustomerForModal) return;
+    track("lms_send", { messageType: message.type, customerId: selectedCustomerForModal.id });
     setShowModal(false);
 
     setSentCustomerIds((prev) => new Set(prev).add(selectedCustomerForModal.id));

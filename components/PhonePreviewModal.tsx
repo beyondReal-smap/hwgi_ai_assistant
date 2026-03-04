@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { LMSMessage, Customer } from "@/lib/types";
+import { track } from "@/lib/analytics";
 
 /** customer.phone 없으면 기본 번호 반환 */
 function getCustomerPhone(customer: Customer): string {
@@ -59,6 +60,7 @@ export default function PhonePreviewModal({
 
   const handleRegenerate = async () => {
     if (!currentMessage || !customer || isRegenerating) return;
+    track("lms_regenerate", { messageType: currentMessage.type, customerId: customer.id });
     setIsRegenerating(true);
     setRegenError(null);
 
