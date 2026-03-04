@@ -181,7 +181,8 @@ export default function PhonePreviewModal({
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.97 }}
                       onClick={() => {
-                        openSmsApp(getCustomerPhone(customer), currentMessage.content);
+                        const body = `[${currentMessage.title}]\n\n${currentMessage.content}`;
+                        openSmsApp(getCustomerPhone(customer), body);
                         onSend(currentMessage);
                       }}
                       disabled={isRegenerating}
@@ -191,7 +192,7 @@ export default function PhonePreviewModal({
                           "linear-gradient(135deg, #F37321 0%, #E06A1B 100%)",
                       }}
                     >
-                      📤 발송하기
+                      📱 메시지 앱으로 전달
                     </motion.button>
 
                     {/* Regenerate button */}

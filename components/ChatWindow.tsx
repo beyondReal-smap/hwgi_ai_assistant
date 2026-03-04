@@ -6,6 +6,7 @@ import {
   useRef,
   useCallback,
 } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ChatMessage, Customer, FPProfile, LMSMessage } from "@/lib/types";
 import { CUSTOMERS, LMS_MESSAGES } from "@/lib/data";
@@ -141,16 +142,18 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
     msg: "",
   });
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+    const el = chatScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
   }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isTyping, scrollToBottom]);
+  }, [messages, scrollToBottom]);
 
   useEffect(() => {
     setMessages([createGreetingMessage(fpProfile)]);
@@ -220,10 +223,12 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
       content: `📋 ${customer.name} 고객 정보\n\n👤 ${customer.gender}성, ${customer.age}세 (${customer.birthDate})\n🎯 이벤트: ${customer.event}\n📌 ${customer.eventDetail}\n\n📦 보유 상품 ${customer.products.length}건:\n${productList}\n\n⏰ ${lastContactText}\n⚡ 긴급도: ${urgencyLabel[customer.urgency]}`,
     });
 
-    await sleep(500);
-
-    // AI로 LMS 메시지 생성 시작
+    // 고객 정보를 읽을 시간 확보 후 타이핑 인디케이터 표시
+    await sleep(1200);
     setIsTyping(true);
+
+    // 타이핑 인디케이터가 충분히 보인 뒤 "생성 중" 메시지 표시
+    await sleep(1400);
     addBotMessage({
       role: "bot",
       type: "text",
@@ -269,8 +274,8 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
     setShowModal(false);
 
     setSentCustomerIds((prev) => new Set(prev).add(selectedCustomerForModal.id));
-    addUserMessage(`${selectedCustomerForModal.name} 고객님께 LMS(${message.type})를 발송했습니다.`);
-    showToastMsg(`${selectedCustomerForModal.name} 고객님께 LMS가 성공적으로 발송되었습니다.`);
+    addUserMessage(`${selectedCustomerForModal.name} 고객님께 보낼 ${message.type} 메시지를 메시지 앱으로 전달했습니다.`);
+    showToastMsg(`${selectedCustomerForModal.name} 고객님 메시지가 메시지 앱으로 전달되었습니다.`);
 
     setIsTyping(true);
     setTimeout(() => {
@@ -278,7 +283,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
       addBotMessage({
         role: "bot",
         type: "text",
-        content: `✅ 발송 완료!\n\n${selectedCustomerForModal.name} 고객님께 ${message.type} 메시지가 성공적으로 발송되었습니다.\n\n다음 고객을 확인하시겠습니까? 아래 버튼을 클릭하거나 검색어를 입력해주세요.`,
+        content: `📱 메시지 앱 전달 완료!\n\n${selectedCustomerForModal.name} 고객님께 보낼 ${message.type} 메시지가 FP님의 메시지 앱으로 전달되었습니다. 내용을 확인 후 발송해주세요.\n\n다음 고객을 확인하시겠습니까?`,
       });
     }, 1200);
 
@@ -326,23 +331,25 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
       <AnimatePresence>
         {isGenerating && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            className="absolute top-0 left-0 right-0 z-20 flex items-center justify-center gap-2 py-2 text-xs font-medium text-white"
-            style={{
-              background: "linear-gradient(90deg, #F37321, #E06A1B)",
-            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="absolute top-0 left-0 right-0 z-20 flex items-center justify-center gap-2 py-2 text-xs font-medium text-white/90"
+            style={{ background: "linear-gradient(90deg, #1A2B4A 0%, #2D4168 50%, #1A2B4A 100%)" }}
           >
-            <span className="animate-spin">⚙</span>
-            AI 영업비서가 고객 맞춤 LMS를 생성 중입니다...
+            <span>AI 영업비서가 맞춤 LMS를 생성 중입니다</span>
+            <span className="flex gap-0.5 items-center">
+              <span className="typing-dot w-1 h-1 rounded-full bg-hanwha-orange" />
+              <span className="typing-dot w-1 h-1 rounded-full bg-hanwha-orange" style={{ animationDelay: "0.2s" }} />
+              <span className="typing-dot w-1 h-1 rounded-full bg-hanwha-orange" style={{ animationDelay: "0.4s" }} />
+            </span>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Chat messages area */}
-      <div className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 chat-scroll relative z-10">
+      <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 chat-scroll relative z-10">
         <div className="max-w-3xl mx-auto">
           {messages.map((msg) => (
             <MessageBubble
@@ -354,11 +361,9 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
             />
           ))}
 
-          <AnimatePresence>
-            {isTyping && <TypingIndicator key="typing" />}
-          </AnimatePresence>
+          {isTyping && <TypingIndicator />}
 
-          <div ref={messagesEndRef} />
+          <div />
         </div>
       </div>
 
@@ -439,26 +444,29 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
         onChooseOther={handleChooseOther}
       />
 
-      {/* Toast */}
-      <AnimatePresence>
-        {toast.show && (
-          <motion.div
-            initial={{ opacity: 0, y: 24, scale: 0.93 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.95 }}
-            transition={{ duration: 0.3, type: "spring", stiffness: 260, damping: 20 }}
-            className="fixed left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md sm:w-auto bottom-[calc(4.8rem+env(safe-area-inset-bottom))] sm:bottom-28 px-4 sm:px-5 py-3 rounded-2xl shadow-modal flex items-center gap-2 sm:gap-3 text-sm font-semibold text-white"
-            style={{
-              background: "linear-gradient(135deg, #1A2B4A 0%, #2D4168 100%)",
-              border: "1px solid rgba(243,115,33,0.3)",
-              boxShadow: "0 12px 40px rgba(26,43,74,0.3)",
-            }}
-          >
-            <span>✅</span>
-            <span>{toast.msg}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Toast — portal to body to avoid overflow-hidden clipping */}
+      {createPortal(
+        <AnimatePresence>
+          {toast.show && (
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.93 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.95 }}
+              transition={{ duration: 0.3, type: "spring", stiffness: 260, damping: 20 }}
+              className="fixed left-1/2 -translate-x-1/2 z-[9999] w-[calc(100%-1.5rem)] max-w-sm bottom-6 px-4 py-3 rounded-2xl flex items-center gap-2 text-sm font-semibold text-white"
+              style={{
+                background: "linear-gradient(135deg, #1A2B4A 0%, #2D4168 100%)",
+                border: "1px solid rgba(243,115,33,0.3)",
+                boxShadow: "0 12px 40px rgba(26,43,74,0.3)",
+              }}
+            >
+              <span>✅</span>
+              <span>{toast.msg}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </main>
   );
 }
