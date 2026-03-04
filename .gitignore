@@ -37,6 +37,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# analytics log (server-side, do not commit)
+/data/analytics.jsonl
+
 # python
 .venv/
 **/.venv/

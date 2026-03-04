@@ -8,7 +8,7 @@ import Sidebar from "@/components/Sidebar";
 import ChatWindow from "@/components/ChatWindow";
 import FPLoginScreen from "@/components/FPLoginScreen";
 import { parseFPAccountsCsv, authenticateFP } from "@/lib/fp-auth";
-import { track } from "@/lib/analytics";
+import { track, setUser } from "@/lib/analytics";
 import type { FPAccount, FPProfile } from "@/lib/types";
 
 const FP_SESSION_KEY = "fp_logged_in_employee_id";
@@ -131,6 +131,7 @@ export default function Home() {
     setTimeout(() => setLoginLoadingDone(true), 3000);
     setTimeout(() => setShowLoginLoading(false), 3700);
 
+    setUser(profile.employeeId);
     track("login", { employeeId: profile.employeeId, name: profile.name, branch: profile.branch });
     setCurrentFP(profile);
     window.localStorage.setItem(FP_SESSION_KEY, profile.employeeId);
@@ -139,6 +140,7 @@ export default function Home() {
   const handleLogout = () => {
     if (!currentFP) return;
     track("logout", { employeeId: currentFP.employeeId, name: currentFP.name });
+    setUser(null);
     setAuthError(null);
     setLogoutFPName(currentFP.name);
     window.localStorage.removeItem(FP_SESSION_KEY);
