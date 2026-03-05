@@ -7,6 +7,7 @@ import type { FPProfile } from "@/lib/types";
 
 const NAV_ITEMS: { label: string; href: string; comingSoon?: boolean }[] = [
   { label: "AI 영업비서", href: "/" },
+  { label: "사용법", href: "/guide" },
   { label: "직업분류", href: "/jobcode", comingSoon: true },
 ];
 const KST_TIMEZONE = "Asia/Seoul";

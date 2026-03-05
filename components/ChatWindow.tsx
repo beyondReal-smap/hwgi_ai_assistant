@@ -470,6 +470,25 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
           });
           const { text } = (await csvRes.json()) as { text: string };
           addBotMessage({ role: "bot", type: "text", content: text });
+
+          // LLM 분석 비동기 호출 (데이터가 있는 경우만)
+          if (text && !text.includes("찾을 수 없습니다") && !text.includes("없습니다.")) {
+            setIsTyping(true);
+            try {
+              const analysisRes = await fetch("/api/analyze-data", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query, dataText: text }),
+              });
+              const { analysis } = (await analysisRes.json()) as { analysis: string };
+              setIsTyping(false);
+              if (analysis) {
+                addBotMessage({ role: "bot", type: "text", content: `💡 ${analysis}` });
+              }
+            } catch {
+              setIsTyping(false);
+            }
+          }
         } catch {
           addBotMessage({
             role: "bot",

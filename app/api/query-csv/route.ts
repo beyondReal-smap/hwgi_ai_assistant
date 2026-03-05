@@ -296,7 +296,7 @@ export async function POST(req: NextRequest) {
         let ageCustomers = getCustomersByAge(params?.ageMin ?? 0, params?.ageMax ?? 999, fp);
         // 성별 복합 조건 지원
         if (params?.gender) {
-          const g = params.gender === "남" || params.gender === "M" ? "M" : "F";
+          const g = params.gender === "남" || params.gender === "M" ? "01" : "02";
           ageCustomers = ageCustomers.filter((c) => c.gender === g);
         }
         const ageMin = params?.ageMin ?? 0;

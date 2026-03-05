@@ -37,7 +37,7 @@ function PaginatedTable({ headers, rows }: { headers: string[]; rows: string[][]
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      <table className="text-[10px] sm:text-xs border-collapse w-full table-fixed">
+      <table className="text-[11px] sm:text-[13px] border-collapse w-full table-fixed">
         <thead>
           <tr className="border-b border-gray-200">
             {headers.map((h, hi) => (
@@ -74,16 +74,16 @@ function PaginatedTable({ headers, rows }: { headers: string[]; rows: string[][]
           <button
             onClick={goPrev}
             disabled={page === 0}
-            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-hanwha-navy hover:bg-gray-100"
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] sm:text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-hanwha-navy hover:bg-gray-100"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
             이전
           </button>
-          <span className="text-[10px] sm:text-xs text-gray-400">{page + 1} / {totalPages}</span>
+          <span className="text-[11px] sm:text-xs text-gray-400">{page + 1} / {totalPages}</span>
           <button
             onClick={goNext}
             disabled={page >= totalPages - 1}
-            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-hanwha-navy hover:bg-gray-100"
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] sm:text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-hanwha-navy hover:bg-gray-100"
           >
             다음
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
