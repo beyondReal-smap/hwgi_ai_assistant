@@ -1,9 +1,149 @@
 "use client";
 
+import { useState, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import type { ChatMessage, Customer, LMSMessage } from "@/lib/types";
 import CustomerCard from "./CustomerCard";
 import LMSMessageCard from "./LMSMessageCard";
+
+const PAGE_SIZE = 15;
+const SWIPE_THRESHOLD = 50;
+
+function PaginatedTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+  const [page, setPage] = useState(0);
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const touchStartX = useRef(0);
+  const totalPages = Math.ceil(rows.length / PAGE_SIZE);
+  const needsPaging = rows.length > PAGE_SIZE;
+  const pageRows = needsPaging ? rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE) : rows;
+
+  const goNext = useCallback(() => setPage((p) => Math.min(totalPages - 1, p + 1)), [totalPages]);
+  const goPrev = useCallback(() => setPage((p) => Math.max(0, p - 1)), []);
+
+  const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const dx = touchStartX.current - e.changedTouches[0].clientX;
+    if (dx > SWIPE_THRESHOLD) goNext();
+    else if (dx < -SWIPE_THRESHOLD) goPrev();
+  };
+
+  const handleRowClick = (ri: number) => {
+    setExpandedRow(expandedRow === ri ? null : ri);
+  };
+
+  return (
+    <div
+      className="my-1.5 -mx-1"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      <table className="text-[10px] sm:text-xs border-collapse w-full table-fixed">
+        <thead>
+          <tr className="border-b border-gray-200">
+            {headers.map((h, hi) => (
+              <th key={hi} className="px-1 sm:px-2 py-1 text-left font-semibold text-hanwha-navy truncate bg-gray-50/80">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {pageRows.map((row, ri) => {
+            const isExpanded = expandedRow === ri;
+            return (
+              <tr
+                key={ri}
+                onClick={() => handleRowClick(ri)}
+                className={`border-b border-gray-100 last:border-0 cursor-pointer transition-colors ${isExpanded ? "bg-orange-50/60" : "active:bg-gray-50/80"}`}
+              >
+                {row.map((cell, ci) => (
+                  <td
+                    key={ci}
+                    className={`px-1 sm:px-2 py-0.5 sm:py-1 text-gray-700 ${isExpanded ? "whitespace-normal break-words" : "truncate"}`}
+                  >
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {needsPaging && (
+        <div className="flex items-center justify-between mt-1.5 px-0.5">
+          <button
+            onClick={goPrev}
+            disabled={page === 0}
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-hanwha-navy hover:bg-gray-100"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            이전
+          </button>
+          <span className="text-[10px] sm:text-xs text-gray-400">{page + 1} / {totalPages}</span>
+          <button
+            onClick={goNext}
+            disabled={page >= totalPages - 1}
+            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-hanwha-navy hover:bg-gray-100"
+          >
+            다음
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 마크다운 테이블이 포함된 텍스트를 파싱하여 React 엘리먼트로 변환 */
+function renderTextWithTables(text: string) {
+  const lines = text.split("\n");
+  const parts: Array<{ type: "text"; value: string } | { type: "table"; headers: string[]; rows: string[][] }> = [];
+  let i = 0;
+  let textBuffer: string[] = [];
+
+  const flushText = () => {
+    if (textBuffer.length > 0) {
+      parts.push({ type: "text", value: textBuffer.join("\n") });
+      textBuffer = [];
+    }
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trimStart().startsWith("|") && i + 1 < lines.length && /^\|[\s-:|]+\|$/.test(lines[i + 1].trim())) {
+      flushText();
+      const headerCells = line.split("|").filter((_, idx, arr) => idx > 0 && idx < arr.length - 1).map((c) => c.trim());
+      i += 2;
+      const tableRows: string[][] = [];
+      while (i < lines.length && lines[i].trimStart().startsWith("|")) {
+        const cells = lines[i].split("|").filter((_, idx, arr) => idx > 0 && idx < arr.length - 1).map((c) => c.trim());
+        tableRows.push(cells);
+        i++;
+      }
+      parts.push({ type: "table", headers: headerCells, rows: tableRows });
+    } else {
+      textBuffer.push(line);
+      i++;
+    }
+  }
+  flushText();
+
+  if (parts.length === 1 && parts[0].type === "text") {
+    return <>{text}</>;
+  }
+
+  return (
+    <>
+      {parts.map((part, idx) =>
+        part.type === "text" ? (
+          <span key={idx}>{part.value}{idx < parts.length - 1 ? "\n" : ""}</span>
+        ) : (
+          <PaginatedTable key={idx} headers={part.headers} rows={part.rows} />
+        )
+      )}
+    </>
+  );
+}
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -78,7 +218,7 @@ export default function MessageBubble({
                 : undefined
             }
           >
-            {message.content}
+            {isBot ? renderTextWithTables(message.content) : message.content}
           </div>
         )}
 

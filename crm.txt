@@ -1,0 +1,1249 @@
+1. 테이블 존재여부 조회
+
+-- selectSfaCtmInfoCrCndXstnYn: 계약조건 테이블 존재여부
+SELECT COUNT(1)
+FROM   SFA_CTM_INFO_CR_CND A
+WHERE  1=1
+AND    ROWNUM = 1;
+
+2. 계약특성조건 고객목록 건수 조회
+
+-- countCrSpquCndCtmList: 계약특성조건 고객 총 건수
+SELECT COUNT(1) AS TOT_CT
+FROM   SFA_CTM_INFO_CR_CND X
+WHERE  1=1
+-- [필수] 보종군 구분코드 (GA:일반, LA:장기, CA:자동차)
+AND    X.IKD_GRPCD = :inqIkdGrpcd           -- 예: 'LA'
+-- [선택] 지점기관코드
+-- AND    X.BR_ORGCD = :inqBrOrgcd
+-- [선택] 사원번호
+-- AND    X.STFNO = :inqStfno
+-- [선택] 사용인번호
+-- AND    X.USRNO = :inqUsrno
+-- [선택] 당사만 조회 (타사반영여부 '0'일 경우)
+-- AND    X.COCPY_FLGCD = '01'
+-- [선택] 보험상품명 LIKE 검색
+-- AND    X.INS_GDNM LIKE '%' || :inqCrGdnm || '%'
+-- [선택] 성별코드 (자동차: NRDPS_SEXCD / 그 외: CRT_SEXCD)
+-- AND    X.CRT_SEXCD IN ('01','02')          -- 01:남, 02:여, 03:사업자
+-- [선택] 나이대 (장기/일반: CRT_AGE, 자동차: NRDPS_AGE)
+-- AND    X.CRT_SEXCD != '03'
+-- AND    (X.CRT_AGE >= 20 AND X.CRT_AGE < 30)
+-- [선택] 상해급수
+-- AND    X.CRT_SEXCD != '03'
+-- AND    (X.CRT_INJR_RNK = 1 OR X.CRT_INJR_RNK = 2 OR X.CRT_INJR_RNK >= 3)
+-- [선택] 상품군코드
+-- AND    X.GDGCD IN ('GD001','GD002')
+-- [선택] 가입년월일 (연도기준)
+-- AND    (SUBSTR(X.IS_YYMD, 0, 4) IN ('2023','2024','2025'))
+-- [선택] 배기량 (자동차 전용)
+-- AND    (X.CR_DSPL >= 1000 AND X.CR_DSPL < 2000)
+-- [선택] 갱신횟수 (자동차 전용)
+-- AND    X.CRINS_RNW_CT >= 1
+-- [선택] 외산차 여부
+-- AND    X.CR_FOMA_CR_YN = '1'
+-- [선택] 납입기간구분코드
+-- AND    X.PYM_TRM_SCTCD IN ('05','06','07')
+-- [선택] 납입방법 (월납/비월납/일시납)
+-- AND    (X.PYM_CYCCD = '01' OR X.PYM_CYCCD IN ('02','03','06','12') OR X.PYM_CYCCD = '00')
+-- [선택] 만기구분코드
+-- AND    X.GN_ND_SCTCD IN ('01','02','03','04')
+-- [선택] 만기도래년월 (자동차: IN조건 / 그 외: 기간비교)
+-- AND    X.ND_ARIV_YYMM <= TO_CHAR(ADD_MONTHS(SYSDATE, 12), 'YYYYMM')
+-- [선택] 무해지구분
+-- AND    X.LTRM_NCN_TYPE_CD = '1'            -- 1:일반형, 2:무해지형
+-- [선택] 납입면제코드
+-- AND    X.LEAD_PVPY_XMP_CD IN ('1','2')
+-- [선택] 계약전환코드
+-- AND    X.LTRCR_CV_TYPE_CD = '1'            -- 1:일반형, 2:계약전환형
+-- [선택] 계약별 보험료 구간
+-- AND    X.CRCL_PRM_AMT_SCTCD IN ('5','10')
+-- [선택] 사고건수
+-- AND    X.CLMCT >= 1
+-- [선택] 지급보험금 구간
+-- AND    (X.CRCL_T_PIBAM >= 100000 AND X.CRCL_T_PIBAM < 300000)
+;
+3. 계약특성조건 고객목록 상세 조회 (페이징)
+
+-- selectCrSpquCndCtmList: 계약특성조건 고객목록 조회
+SELECT A.RNO                     AS ROWNO          /* 조회순번 */
+     , A.CRDIS_PLYNO                               /* 증권번호 */
+     , A.BR_ORGCD                                   /* 지점기관코드 */
+     , A.STFNO                                      /* 사원번호 */
+     , (SELECT Z.NM FROM SAM_STF Z WHERE Z.STFNO = A.STFNO) AS STFNM          /* 사원명 */
+     , A.USRNO                                      /* 사용인번호 */
+     , (SELECT Z.NM FROM SAM_STF Z WHERE Z.STFNO = A.USRNO) AS USRNM          /* 사용인명 */
+     , A.CRT_BZFML_CTM_SEQNO                        /* 계약자가족고객순번 */
+     , A.CRT_SEXCD                                  /* 계약자 성별 */
+     , A.CRT_AGE                                    /* 계약자 나이 */
+     , A.CRT_INJR_RNK                               /* 계약자 상해급수 */
+     , A.GDGCD                                      /* 상품코드 */
+     , SF_MET_DTCNM('06016', A.GDGCD) AS GDNM      /* 상품명 */
+     , A.CRT_CTMNO                                  /* 계약자 고객번호 */
+     , A.CRRNM                                      /* 계약자명 */
+     , A.NRDPS_CTMNO                                /* 피보험자 고객번호 */
+     , A.NRDNM                                      /* 피보험자명 */
+     , A.BZ_FML_CTM_SEQNO                           /* 영업가족고객순번(피보험자) */
+     , NVL((CASE WHEN A.CRT_SEXCD = '03'
+                 THEN (SELECT Z.CTM_DSCNO FROM CUS_CTM Z WHERE Z.CTMNO = A.CRT_CTMNO AND ROWNUM = 1)
+                 ELSE (SELECT Z.CTM_DSCNO FROM CUS_BZ_FML_CTM Z WHERE Z.STFNO = A.STFNO AND Z.BZ_FML_CTM_SEQNO = A.CRT_BZFML_CTM_SEQNO AND ROWNUM = 1)
+            END), '') AS CTM_DSCNO                  /* 고객식별번호 */
+     , A.GNANL_NO                                   /* 보장분석번호 */
+     , A.GNANL_CTM_SEQNO                            /* 보장분석고객순번 */
+     , NVL((SELECT TO_CHAR(Z.GNANL_DT, 'YYYYMMDD') FROM SFA_GNANL_CTM Z
+            WHERE Z.GNANL_NO = A.GNANL_NO AND Z.GNANL_CTM_SEQNO = A.GNANL_CTM_SEQNO AND ROWNUM=1), '') AS GNANL_DT  /* 최근분석일자 */
+     , A.IS_CMPNM                                   /* 가입회사명 */
+     , A.INS_GDNM                                   /* 가입보험명 */
+     , A.LTRM_PRM                                   /* 장기보험료 */
+     , A.INSST_YYMD                                 /* 보험시기 */
+     , SF_MET_DTCNM('01405', A.PYM_TRMCD) AS PYM_TRM  /* 납입기간 */
+     , SF_MET_DTCNM('01406', A.NDCD) AS ND             /* 만기 */
+     , NVL((SELECT '1' FROM SFA_SELF_ACT_BJ_CTM Z
+            WHERE Z.STFNO = A.STFNO AND Z.USRNO = A.USRNO
+            AND   Z.BZ_FML_CTM_SEQNO = A.CRT_BZFML_CTM_SEQNO
+            AND   Z.ACT_TRGT_RGT_YYMM = (SELECT CASE WHEN SYSDATE BETWEEN IA.CMPG_STRDT AND IA.CMPG_NDDT
+                                                       THEN TO_CHAR(SYSDATE, 'YYYYMM')
+                                                       ELSE TO_CHAR(IA.CMPG_NDDT, 'YYYYMM') END
+                                          FROM SFA_CMPG_INFO IA WHERE IA.CMPG_SEQNO = :inqCmpgSeqno)
+            AND ROWNUM=1), '0') AS PRIO_ACES_CTM_BJ_YN  /* 우선접근고객등록여부 */
+     , (SELECT Z.TLANO || '-' || Z.TLTNO || '-' || Z.STR_TLSNO
+        FROM CUS_BZ_FML_CTM_CNTAD Z
+        WHERE Z.STFNO = A.STFNO AND Z.BZ_FML_CTM_SEQNO = A.CRT_BZFML_CTM_SEQNO
+        AND   Z.CNTAD_FLGCD = '800' AND ROWNUM = 1) AS CTM_HPNO  /* 고객 휴대전화 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.AGRE_OR_RQ_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CRT_CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND   IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_AGRE_YN       /* 마케팅활용동의 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.MKTG_DM_RCV_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CRT_CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND   IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_PST_AGRE_YN   /* 마케팅우편동의 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.MKTG_SMS_RCV_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CRT_CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND   IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_MOBL_AGRE_YN  /* 마케팅모바일동의 */
+     , NVL((SELECT MAX(Z.PLNO ||'|'|| Z.CGAF_CH_SEQNO)
+            FROM INS_INS_PL Z, INS_PL_RELPC Y
+            WHERE Z.DH_STFNO = A.STFNO AND Y.CTMNO = A.CRT_CTMNO
+            AND   Z.PLNO = Y.PLNO AND Z.CGAF_CH_SEQNO = Y.CGAF_CH_SEQNO
+            AND   Y.RELPC_TPCD IN ('01','02')
+            AND   Z.IKD_GRPCD IN ('LA','MA','FA','CA')
+            AND   Z.VALD_PL_YN = '1' AND Z.PL_FLGCD = '01'
+            AND   Z.PL_STCD IN ('03','04','05','06','07','08','09')
+            AND   Z.PLDT BETWEEN TO_DATE(:inqStrDt, 'YYYYMMDDHH24MISS') AND TO_DATE(:inqNdDt, 'YYYYMMDDHH24MISS')
+            AND   ROWNUM=1), '0') AS PLNO              /* 가입설계번호 */
+     , A.ND_ARIV_YYMM                               /* 만기도래년월 */
+     , A.LTRM_NCN_TYPE_CD                           /* 무해지형코드 */
+     , A.LEAD_PVPY_XMP_CD                           /* 납입면제형코드 */
+     , A.LTRCR_CV_TYPE_CD                           /* 계약전환형코드 */
+     , A.Y3_IN_CLMCT                                /* 3년내 사고건수 */
+     , A.Y3_IN_CLM_AMT                              /* 3년내 사고금액 */
+     , CASE WHEN (SELECT COUNT(1) FROM SFA_CTM_INFO_CTM_CND IA
+                  WHERE IA.STFNO = A.STFNO AND IA.USRNO = A.USRNO
+                  AND   IA.BZ_FML_CTM_SEQNO = A.CRT_BZFML_CTM_SEQNO
+                  AND   IA.BZ_FMLCU_FLGCD IN ('20','90')
+                  AND   IA.PSN_IC_YN IS NOT NULL) > 0
+            THEN '1' ELSE '0' END AS IF_IC_YN       /* 추정소득여부 */
+FROM  (SELECT Y.*
+       FROM  (SELECT ROW_NUMBER() OVER(ORDER BY X.STFNO ASC, X.CRRNM ASC, X.NRDNM ASC, X.INSST_YYMD DESC) AS RNO
+                   , X.*
+              FROM   SFA_CTM_INFO_CR_CND X
+              WHERE  1=1
+              AND    X.IKD_GRPCD = :inqIkdGrpcd       -- [필수] 보종군구분코드
+              -- === 아래 조건은 필요시 주석 해제 ===
+              -- AND    X.BR_ORGCD = :inqBrOrgcd
+              -- AND    X.STFNO = :inqStfno
+              -- AND    X.USRNO = :inqUsrno
+              -- AND    X.CRT_SEXCD IN ('01','02')
+              -- AND    X.CRT_AGE >= 30 AND X.CRT_AGE < 40
+             ) Y
+       WHERE Y.RNO BETWEEN (:pageNo - 1) * :pageSize + 1 AND :pageNo * :pageSize
+      ) A
+WHERE 1=1;
+4. 계약특성조건 중복제거 고객 건수 조회
+
+-- countCrSpquCndDbElmntCtmList: 중복제거 고객 건수
+SELECT COUNT(1) AS TOT_CT
+FROM  (SELECT X.BR_ORGCD, X.STFNO, X.USRNO
+            , X.CRT_BZFML_CTM_SEQNO, X.CRT_CTMNO, X.CRRNM, X.CRT_SEXCD
+       FROM   SFA_CTM_INFO_CR_CND X
+       WHERE  1=1
+       AND    X.IKD_GRPCD = :inqIkdGrpcd
+       -- AND    X.BR_ORGCD = :inqBrOrgcd
+       -- AND    X.STFNO = :inqStfno
+       GROUP BY X.BR_ORGCD, X.STFNO, X.USRNO
+              , X.CRT_BZFML_CTM_SEQNO, X.CRT_CTMNO, X.CRRNM, X.CRT_SEXCD
+      ) A;
+5. 계약특성조건 중복제거 고객목록 조회 (페이징)
+
+-- selectCrSpquCndDbElmntCtmList: 중복제거 고객목록
+SELECT A.BR_ORGCD                                    /* 지점기관코드 */
+     , A.STFNO                                       /* 사원번호 */
+     , (SELECT Z.NM FROM SAM_STF Z WHERE Z.STFNO = A.STFNO) AS STFNM          /* 사원명 */
+     , A.USRNO                                       /* 사용인번호 */
+     , (SELECT Z.NM FROM SAM_STF Z WHERE Z.STFNO = A.USRNO) AS USRNM          /* 사용인명 */
+     , A.CRT_BZFML_CTM_SEQNO                         /* 계약자가족고객순번 */
+     , A.CRT_CTMNO                                   /* 계약자 고객번호 */
+     , A.CRRNM                                       /* 계약자명 */
+     , NVL((CASE WHEN A.CRT_SEXCD = '03'
+                 THEN (SELECT Z.CTM_DSCNO FROM CUS_CTM Z WHERE Z.CTMNO = A.CRT_CTMNO AND ROWNUM = 1)
+                 ELSE (SELECT Z.CTM_DSCNO FROM CUS_BZ_FML_CTM Z
+                       WHERE Z.STFNO = A.STFNO AND Z.BZ_FML_CTM_SEQNO = A.CRT_BZFML_CTM_SEQNO AND ROWNUM = 1)
+            END), '') AS CTM_DSCNO                   /* 고객식별번호 */
+     , (SELECT Z.TLANO || '-' || Z.TLTNO || '-' || Z.STR_TLSNO
+        FROM CUS_BZ_FML_CTM_CNTAD Z
+        WHERE Z.STFNO = A.STFNO AND Z.BZ_FML_CTM_SEQNO = A.CRT_BZFML_CTM_SEQNO
+        AND   Z.CNTAD_FLGCD = '800' AND ROWNUM = 1) AS CTM_HPNO              /* 고객 휴대전화 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.AGRE_OR_RQ_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CRT_CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND   IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_AGRE_YN       /* 마케팅활용동의여부 */
+FROM  (SELECT Y.*
+       FROM  (SELECT ROW_NUMBER() OVER(ORDER BY X.STFNO ASC, X.CRRNM ASC) AS RNO
+                   , X.BR_ORGCD, X.STFNO, X.USRNO
+                   , X.CRT_BZFML_CTM_SEQNO, X.CRT_CTMNO, X.CRRNM, X.CRT_SEXCD
+              FROM   SFA_CTM_INFO_CR_CND X
+              WHERE  1=1
+              AND    X.IKD_GRPCD = :inqIkdGrpcd
+              -- AND    X.BR_ORGCD = :inqBrOrgcd
+              -- AND    X.STFNO = :inqStfno
+              GROUP BY X.BR_ORGCD, X.STFNO, X.USRNO
+                     , X.CRT_BZFML_CTM_SEQNO, X.CRT_CTMNO, X.CRRNM, X.CRT_SEXCD
+             ) Y
+       WHERE Y.RNO BETWEEN (:pageNo - 1) * :pageSize + 1 AND :pageNo * :pageSize
+      ) A
+WHERE 1=1;
+주요 바인드 변수 정리
+변수명	설명	예시값
+:inqIkdGrpcd	[필수] 보종군구분코드	'LA'(장기), 'GA'(일반), 'CA'(자동차)
+:inqBrOrgcd	지점기관코드	'1234'
+:inqStfno	사원번호	'0012345'
+:inqUsrno	사용인번호	'0012345'
+:pageNo	페이지번호	1
+:pageSize	페이지크기	20
+:inqCmpgSeqno	캠페인순번	100
+:inqStrDt	조회시작일	'20250101000000'
+:inqNdDt	조회종료일	'20251231235959'
+참고: -- 주석 처리된 WHERE 조건들은 화면에서 사용자가 선택한 검색조건에 따라 동적으로 활성화되는 부분입니다. 필요한 조건의 주석을 해제하고 바인드 변수 값을 넣어서 사용하면 됩니다. :변수명 형식은 Oracle 바인드 변수이며, 툴에 따라 ?나 #{변수명}으로 대체하여 사용할 수 있습니다.
+
+
+1. 테이블 존재여부 조회
+
+-- selectSfaCtmInfoCtmCndXstnYn: 고객조건 테이블 존재여부
+SELECT COUNT(1)
+FROM   SFA_CTM_INFO_CTM_CND A
+WHERE  1=1
+AND    ROWNUM = 1;
+2. 고객정보 상세 조회 (특정 고객 1건)
+
+-- selectCtmInfo: 고객정보조회 (사원+사용인+영업가족고객순번 기준 1건)
+SELECT C.*
+FROM   (
+       SELECT A.STFNO                                     /* 직원번호 */
+            , A.USRNO                                     /* 사용인번호 */
+            , A.BZ_FML_CTM_SEQNO                          /* 영업가족고객순번 */
+            , A.BZ_FMLCU_FLGCD                            /* 영업가족고객구분코드 */
+            , (SELECT SF_MET_DTCNM('05387', A.BZ_FMLCU_FLGCD) FROM DUAL) AS BZ_FMLCU_FLG_CDNM  /* 구분코드명 */
+            , A.BR_ORGCD                                  /* 지점기관코드 */
+            , A.HNGL_CTMNM                                /* 한글고객명 */
+            , A.CTMNO                                     /* 고객번호 */
+            , A.GNANL_NO                                  /* 보장분석번호 */
+            , A.GNANL_CTM_SEQNO                           /* 보장분석고객순번 */
+            , (SELECT TO_CHAR(IA.GNANL_DT, 'YYYYMMDD')
+               FROM   SFA_GNANL_BA IA
+               WHERE  IA.GNANL_NO = A.GNANL_NO) AS LATS_GNANL_DT  /* 최근보장분석일자 */
+            , A.SEXCD                                     /* 성별코드 */
+            , DECODE(A.SEXCD, '00', '전체', (SELECT SF_MET_DTCNM('00376', A.SEXCD) FROM DUAL)) AS SEX_CDNM  /* 성별코드명 */
+            , A.AGE                                       /* 연령 */
+            , A.SD                                        /* 시도 */
+            , A.SGNG                                      /* 시군구 */
+            , A.TWMD                                      /* 읍면동 */
+            , A.INJR_RNK                                  /* 상해급수 */
+            , A.IS_PL_AGRE_YN                             /* 가입설계동의여부 */
+            , A.INS_AGE_YYMM                              /* 보험연령년월 */
+            , A.BRTH                                      /* 생년월일 */
+            , A.CTM_BORN_MNTH                             /* 고객출생월 */
+            , A.TA_CTM_YN                                 /* 이관고객여부 */
+            , A.LTRM_CLM_YN                               /* 장기사고유무 */
+            , A.CR_CLM_YN                                 /* 자동차사고여부 */
+            , A.LTINS_IS_YN                               /* 장기보험가입여부 */
+            , A.CR_INS_IS_YN                              /* 자동차보험가입여부 */
+            , A.GNRZ_GD_ISYN                              /* 종합상품가입여부 */
+            , A.DRV_INS_ISYN                              /* 운전자보험가입여부 */
+            , A.CHD_INS_ISYN                              /* 자녀보험가입여부 */
+            , A.SPL_INS_ISYN                              /* 간편보험가입여부 */
+            , A.CANCR_INS_ISYN                            /* 암보험가입여부 */
+            , A.NRDSS_INS_ISYN                            /* 간병보험가입여부 */
+            , A.SGRMI_INS_ISYN                            /* 단독실손보험가입여부 */
+            , A.PRPRT_INS_ISYN                            /* 재물보험가입여부 */
+            , A.DSAS_INS_ISYN                             /* 질병보험가입여부 */
+            , A.INJR_PRV_OTINS_ISYN                       /* 상해기타보험가입여부 */
+            , A.THCP_LATS_IS_PNTM_CD                      /* 당사최근가입시점코드 */
+            , A.OTCM_LATS_IS_PNTM_CD                      /* 타사최근가입시점코드 */
+            , A.THCP_LATS_IS_YYMD                         /* 당사최근가입년월일 */
+            , A.OTCM_LATS_IS_YYMD                         /* 타사최근가입년월일 */
+            , A.THCP_IS_LTRM_INSCT                        /* 당사가입장기보험건수 */
+            , A.THCP_IS_LTRM_IBAMT                        /* 당사가입장기보험금액 */
+            , A.THCP_IS_CR_INSCT                          /* 당사가입자동차보험건수 */
+            , A.THCP_IS_CR_IBAMT                          /* 당사가입자동차보험금액 */
+            , A.THCP_IS_GN_INSCT                          /* 당사가입일반보험건수 */
+            , A.THCP_IS_GN_IBAMT                          /* 당사가입일반보험금액 */
+            , A.OTCM_IS_LTRM_LFINR_CT                     /* 타사가입장기생보건수 */
+            , A.OTCM_IS_LTRM_LFINR_AMT                    /* 타사가입장기생보금액 */
+            , A.OTCM_IS_LTRM_NLISR_CT                     /* 타사가입장기손보건수 */
+            , A.OTCM_IS_LTRM_NLISR_AMT                    /* 타사가입장기손보금액 */
+            , A.OTCM_IS_CR_NLISR_CT                       /* 타사가입자동차손보건수 */
+            , A.OTCM_IS_CR_NLISR_AMT                      /* 타사가입자동차손보금액 */
+            , A.OTCM_IS_GN_LFINR_CT                       /* 타사가입일반생보건수 */
+            , A.OTCM_IS_GN_LFINR_AMT                      /* 타사가입일반생보금액 */
+            , A.OTCM_IS_GN_NLISR_CT                       /* 타사가입일반손보건수 */
+            , A.OTCM_IS_GN_NLISR_AMT                      /* 타사가입일반손보금액 */
+            , A.OTCM_INFO_ST_YYMD                         /* 타사정보기준년월일 */
+            , A.NW_PSS_CTM_YN                             /* 신규가망고객여부 */
+            , A.PSN_IC_YN                                 /* 개인소득여부 */
+            , DECODE(A.PSN_IC_YN, '0', '가구', '1', '개인', '') AS PSN_IC_YN_NM  /* 개인소득여부명 */
+            , A.IC_LEVEL_FLGCD                            /* 소득수준구분코드 */
+            , (SELECT SF_MET_DTCNM('06493', A.IC_LEVEL_FLGCD) FROM DUAL) AS IC_LEVEL_FLG_CDNM  /* 소득수준명 */
+            , A.IC_IF_MTDCD                               /* 소득추정방법코드 */
+            , A.CRD_LEVEL_FLGCD                           /* 신용수준구분코드 */
+            , A.CRD_IF_MTDCD                              /* 신용추정방법코드 */
+            , A.PYM_LEVEL_FLGCD                           /* 납입수준구분코드 */
+            , (SELECT SF_MET_DTCNM('06498', A.PYM_LEVEL_FLGCD) FROM DUAL) AS PYM_LEVEL_FLG_CDNM  /* 납입수준명 */
+            , (SELECT IA.IC_QUINT_CN
+               FROM   SFA_IF_IC_ST_ADM IA
+               WHERE  IA.IF_IC_ST_FLGCD = '01' AND IA.SEXCD = '00'
+               AND    IA.AGE_SCT_STRVL = 00 AND IA.AGE_SCT_NDVL = 99
+               AND    IA.PSN_IC_YN = A.PSN_IC_YN
+               AND    IA.IC_LEVEL_FLGCD = A.IC_LEVEL_FLGCD) AS TOT_GP_IC_QUINT_CN  /* 전체소득분위 */
+            , (SELECT IA.IC_QUINT_CN
+               FROM   SFA_IF_IC_ST_ADM IA
+               WHERE  IA.IF_IC_ST_FLGCD = '01' AND IA.SEXCD = A.SEXCD
+               AND    A.AGE BETWEEN IA.AGE_SCT_STRVL AND IA.AGE_SCT_NDVL
+               AND    IA.PSN_IC_YN = A.PSN_IC_YN
+               AND    IA.IC_LEVEL_FLGCD = A.IC_LEVEL_FLGCD) AS SAME_GP_IC_QUINT_CN  /* 동일그룹소득분위 */
+       FROM   SFA_CTM_INFO_CTM_CND A
+       WHERE  1=1
+       AND    A.STFNO = :inqStfno                        -- [필수] 직원번호
+       AND    A.USRNO = :inqUsrno                        -- [필수] 사용인번호
+       AND    A.BZ_FML_CTM_SEQNO = :inqBzFmlCtmSeqno    -- [필수] 영업가족고객순번
+       ORDER BY A.STFNO, A.USRNO, A.BZ_FML_CTM_SEQNO
+              , CASE WHEN A.PSN_IC_YN IS NOT NULL
+                     THEN DECODE(A.BZ_FMLCU_FLGCD, '20', 1, '90', 2, 3)
+                     ELSE 4
+                END
+       ) C
+WHERE  ROWNUM = 1;
+3. 고객특성조건 고객목록 건수 조회
+
+-- countCtmSpquCndCtmList: 고객특성조건 고객 총 건수
+
+-- [Case A] 고객명으로 검색하는 경우
+SELECT COUNT(1) AS TOT_CNT
+FROM   (SELECT A.CTMNO
+        FROM   SFA_CTM_INFO_CTM_CND A
+        WHERE  1=1
+        AND    A.HNGL_CTMNM = :inqCtmHnglnm              -- 고객한글명
+        -- AND    A.BR_ORGCD = :inqBrOrgcd
+        -- AND    A.STFNO = :inqStfno
+        -- AND    A.USRNO = :inqUsrno
+        GROUP BY A.CTMNO);
+
+-- [Case B] 고객특성 조건으로 검색하는 경우
+SELECT COUNT(1) AS TOT_CNT
+FROM   SFA_CTM_INFO_CTM_CND A
+WHERE  1=1
+-- AND    A.BR_ORGCD = :inqBrOrgcd
+-- AND    A.STFNO = :inqStfno
+-- AND    A.USRNO = :inqUsrno
+-- AND    A.BZ_FMLCU_FLGCD||'' = :inqBzFmlcuFlgcd       -- 10:피보험자, 20:계약자, 90:가망고객
+-- AND    A.SEXCD IN ('01','02')                          -- 01:남, 02:여, 03:사업자
+-- AND    A.SEXCD != '03' AND (A.AGE >= 30 AND A.AGE < 40) -- 나이대
+-- AND    A.SD = :inqSd                                   -- 시도
+-- AND    A.SGNG = :inqSgng                               -- 시군구
+-- AND    A.TWMD = :inqTwmd                               -- 읍면동
+-- AND    A.SEXCD != '03' AND (A.INJR_RNK = 1 OR A.INJR_RNK = 2 OR A.INJR_RNK >= 3)  -- 상해급수
+-- AND    A.SEXCD != '03' AND A.IS_PL_AGRE_YN = '1'      -- 가입설계동의
+-- AND    A.SEXCD != '03' AND SUBSTR(A.INS_AGE_YYMM, 5, 2) IN ('01','02','03')  -- 상월령
+-- AND    A.SEXCD != '03' AND A.CTM_BORN_MNTH IN ('01','02','03')  -- 탄생월
+-- AND    A.TA_CTM_YN = '1'                               -- 이관고객여부
+-- AND    A.LTRM_CLM_YN = '1'                             -- 장기사고여부
+-- AND    A.CR_CLM_YN = '1'                               -- 자동차사고여부
+-- AND    A.LTINS_IS_YN = '1'                             -- 장기보험가입여부
+-- AND    A.CR_INS_IS_YN = '1'                            -- 자동차보험가입여부
+-- === 상품군 (inqIsGdCnd = '1' 일 때) ===
+-- AND    A.GNRZ_GD_ISYN = '1'                            -- 종합상품가입여부
+-- AND    A.DRV_INS_ISYN = '1'                            -- 운전자상품가입여부
+-- AND    A.CHD_INS_ISYN = '1'                            -- 자녀상품가입여부
+-- AND    A.SPL_INS_ISYN = '1'                            -- 간편상품가입여부
+-- AND    A.CANCR_INS_ISYN = '1'                          -- 암상품가입여부
+-- AND    A.NRDSS_INS_ISYN = '1'                          -- 간병상품가입여부
+-- AND    A.SGRMI_INS_ISYN = '1'                          -- 단독실손상품가입여부
+-- AND    A.PRPRT_INS_ISYN = '1'                          -- 재물상품가입여부
+-- AND    A.DSAS_INS_ISYN = '1'                           -- 질병상품가입여부
+-- AND    A.INJR_PRV_OTINS_ISYN = '1'                     -- 상해기타상품가입여부
+-- === 타사정보 반영 (inqOtcmIsInfoRfltYn = '1') ===
+-- AND    (A.THCP_LATS_IS_PNTM_CD IN ('01','02') OR A.OTCM_LATS_IS_PNTM_CD IN ('01','02'))  -- 당,타사최근가입시점
+-- AND    (A.THCP_IS_LTRM_INSCT + A.OTCM_IS_LTRM_NLISR_CT + A.OTCM_IS_LTRM_LFINR_CT) >= 3  -- 당+타사 장기보험건수
+-- AND    (A.OTCM_IS_LTRM_LFINR_AMT + A.OTCM_IS_LTRM_NLISR_AMT + A.THCP_IS_LTRM_IBAMT) >= 100000 AND ... < 150000  -- 당+타사 장기보험금액
+-- === 타사정보 미반영 (inqOtcmIsInfoRfltYn = '0') ===
+-- AND    A.THCP_LATS_IS_PNTM_CD IN ('01','02')           -- 당사최근가입시점
+-- AND    A.THCP_IS_LTRM_INSCT >= 3                       -- 당사 장기보험건수
+-- AND    A.THCP_IS_LTRM_IBAMT >= 100000 AND A.THCP_IS_LTRM_IBAMT < 150000  -- 당사 장기보험금액
+;
+4. 고객특성조건 고객목록 조회 (페이징)
+
+-- selectCtmSpquCndCtmList: 고객특성조건 고객목록 조회
+SELECT A.RNO AS ROWNO                                    /* 조회순번 */
+     , A.BR_ORGCD                                        /* 지점기관코드 */
+     , A.STFNO                                           /* 사원번호 */
+     , (SELECT Z.NM FROM SAM_STF Z WHERE Z.STFNO = A.STFNO) AS STFNM          /* 사원명 */
+     , A.USRNO                                           /* 사용인번호 */
+     , (SELECT Z.NM FROM SAM_STF Z WHERE Z.STFNO = A.USRNO) AS USRNM          /* 사용인명 */
+     , A.BZ_FML_CTM_SEQNO                                /* 영업가족고객순번 */
+     , A.HNGL_CTMNM                                      /* 고객한글명 */
+     , A.CTMNO                                           /* 고객번호 */
+     , NVL((CASE WHEN A.SEXCD = '03'
+                 THEN (SELECT Z.CTM_DSCNO FROM CUS_CTM Z WHERE Z.CTMNO = A.CTMNO AND ROWNUM = 1)
+                 ELSE (SELECT Z.CTM_DSCNO FROM CUS_BZ_FML_CTM Z
+                       WHERE Z.STFNO = A.STFNO AND Z.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO AND ROWNUM = 1)
+            END), '') AS CTM_DSCNO                       /* 고객식별번호 */
+     , A.SEXCD                                           /* 성별코드 */
+     , A.AGE                                             /* 나이 */
+     , A.INJR_RNK                                        /* 상해급수 */
+     , A.SD                                              /* 시도 */
+     , A.SGNG                                            /* 시군구 */
+     , A.TWMD                                            /* 읍면동 */
+     , A.INS_AGE_YYMM                                    /* 보험연령년월 */
+     , (SELECT Z.TLANO || '-' || Z.TLTNO || '-' || Z.STR_TLSNO
+        FROM CUS_BZ_FML_CTM_CNTAD Z
+        WHERE Z.STFNO = A.STFNO AND Z.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+        AND   Z.CNTAD_FLGCD = '800' AND ROWNUM = 1) AS CTM_HP  /* 고객전화번호 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.AGRE_OR_RQ_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND   IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_AGRE_YN       /* 마케팅동의여부 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.MKTG_DM_RCV_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND   IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_PST_AGRE_YN   /* 우편동의여부 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.MKTG_SMS_RCV_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND   IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_MOBL_AGRE_YN  /* 모바일동의여부 */
+     , NVL((SELECT '1' FROM SFA_SELF_ACT_BJ_CTM Z
+            WHERE Z.STFNO = A.STFNO AND Z.USRNO = A.USRNO
+            AND   Z.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+            AND   Z.ACT_TRGT_RGT_YYMM = (SELECT CASE WHEN SYSDATE BETWEEN IA.CMPG_STRDT AND IA.CMPG_NDDT
+                                                       THEN TO_CHAR(SYSDATE, 'YYYYMM')
+                                                       ELSE TO_CHAR(IA.CMPG_NDDT, 'YYYYMM') END
+                                          FROM SFA_CMPG_INFO IA WHERE IA.CMPG_SEQNO = :inqCmpgSeqno)
+            AND ROWNUM=1), '0') AS PRIO_ACES_CTM_RGT_YN  /* 우선접근고객등록여부 */
+     , A.GNANL_NO                                        /* 보장분석번호 */
+     , NVL((SELECT TO_CHAR(Z.GNANL_DT, 'YYYYMMDD') FROM SFA_GNANL_CTM Z
+            WHERE Z.GNANL_NO = A.GNANL_NO AND Z.GNANL_CTM_SEQNO = A.GNANL_CTM_SEQNO
+            AND ROWNUM=1), '') AS GNANL_DT                /* 최근분석일자 */
+     , A.GNANL_CTM_SEQNO                                 /* 보장분석고객순번 */
+     , NVL((SELECT MAX(Z.PLNO ||'|'|| Z.CGAF_CH_SEQNO)
+            FROM INS_INS_PL Z, INS_PL_RELPC Y
+            WHERE Z.DH_STFNO = A.STFNO AND Y.CTMNO = A.CTMNO
+            AND   Z.PLNO = Y.PLNO AND Z.CGAF_CH_SEQNO = Y.CGAF_CH_SEQNO
+            AND   Y.RELPC_TPCD IN ('01','02')
+            AND   Z.IKD_GRPCD IN ('LA','MA','FA','CA')
+            AND   Z.VALD_PL_YN = '1' AND Z.PL_FLGCD = '01'
+            AND   Z.PL_STCD IN ('03','04','05','06','07','08','09')
+            AND   Z.PLDT BETWEEN TO_DATE(:inqStrDt, 'YYYYMMDDHH24MISS') AND TO_DATE(:inqNdDt, 'YYYYMMDDHH24MISS')
+            AND   ROWNUM = 1), '0') AS PLNO              /* 가입설계번호 */
+     , A.TA_CTM_YN                                       /* 이관고객여부 */
+     , A.THCP_LATS_IS_YYMD                               /* 당사최근가입년월일 */
+     , A.OTCM_LATS_IS_YYMD                               /* 타사최근가입년월일 */
+     , A.THCP_IS_LTRM_INSCT                              /* 당사장기보험건수 */
+     , A.THCP_IS_LTRM_IBAMT                              /* 당사장기보험금액 */
+     , A.THCP_IS_CR_INSCT                                /* 당사자동차보험건수 */
+     , A.THCP_IS_CR_IBAMT                                /* 당사자동차보험금액 */
+     , A.THCP_IS_GN_INSCT                                /* 당사일반보험건수 */
+     , A.THCP_IS_GN_IBAMT                                /* 당사일반보험금액 */
+     , A.OTCM_IS_LTRM_LFINR_CT                           /* 타사장기생보건수 */
+     , A.OTCM_IS_LTRM_LFINR_AMT                          /* 타사장기생보금액 */
+     , A.OTCM_IS_LTRM_NLISR_CT                           /* 타사장기손보건수 */
+     , A.OTCM_IS_LTRM_NLISR_AMT                          /* 타사장기손보금액 */
+     , A.OTCM_IS_CR_NLISR_CT                             /* 타사자동차손보건수 */
+     , A.OTCM_IS_CR_NLISR_AMT                            /* 타사자동차손보금액 */
+     , A.OTCM_IS_GN_LFINR_CT                             /* 타사일반생보건수 */
+     , A.OTCM_IS_GN_LFINR_AMT                            /* 타사일반생보금액 */
+     , A.OTCM_IS_GN_NLISR_CT                             /* 타사일반손보건수 */
+     , A.OTCM_IS_GN_NLISR_AMT                            /* 타사일반손보금액 */
+     , A.OTCM_INFO_ST_YYMD                               /* 타사정보기준년월일 */
+     , NVL2(A.PSN_IC_YN, 1, 0) AS IF_IC_YN              /* 추정소득여부 */
+     , NVL((SELECT BORN_YR FROM CUS_BZ_FML_CTM CBFC
+            WHERE CBFC.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+            AND   CBFC.STFNO = A.STFNO), '') AS CTM_BORN_YR      /* 출생년 */
+     , NVL((SELECT BORN_MNDY FROM CUS_BZ_FML_CTM CBFC
+            WHERE CBFC.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+            AND   CBFC.STFNO = A.STFNO), '') AS CTM_BORN_MNDY    /* 출생월일 */
+     , (SELECT Z.STR_TLSNO FROM CUS_BZ_FML_CTM_CNTAD Z
+        WHERE Z.STFNO = CASE WHEN A.USRNO = '9999999' THEN A.STFNO ELSE A.USRNO END
+        AND   Z.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+        AND   Z.CNTAD_FLGCD = '800' AND ROWNUM = 1) AS CTM_TLNO_SNO  /* 전화번호 뒷자리 */
+FROM   (SELECT X.*
+        FROM   (SELECT ROW_NUMBER() OVER(ORDER BY A.STFNO, A.HNGL_CTMNM,
+                       DECODE(A.BZ_FMLCU_FLGCD, '20', 1, '90', 2, 3)) AS RNO
+                     , A.*
+                FROM   SFA_CTM_INFO_CTM_CND A
+                WHERE  1=1
+                -- === 동적 WHERE 조건 (필요시 주석 해제) ===
+                -- AND    A.BR_ORGCD = :inqBrOrgcd
+                -- AND    A.STFNO = :inqStfno
+                -- AND    A.USRNO = :inqUsrno
+                -- AND    A.BZ_FMLCU_FLGCD||'' = :inqBzFmlcuFlgcd    -- 10:피보험자, 20:계약자, 90:가망고객
+                -- AND    A.SEXCD IN ('01','02')
+                -- AND    A.SEXCD != '03' AND (A.AGE >= 30 AND A.AGE < 40)
+                -- AND    A.SD = :inqSd
+                -- AND    A.SGNG = :inqSgng
+                -- AND    A.TWMD = :inqTwmd
+               ) X
+        WHERE  1=1
+        -- [고객특성 조건 검색시] 페이징
+        AND    X.RNO BETWEEN (:pageNo - 1) * :pageSize + 1 AND :pageNo * :pageSize
+        -- [한글명 검색시] 첫 번째 행만
+        -- AND    X.RNO = 1
+       ) A;
+5. GA 고객특성조건 고객목록 조회 (페이징)
+
+-- selectGaCtmSpquCndCtmList: GA 고객특성조건 고객목록
+SELECT A.RNO AS ROWNO                                    /* 조회순번 */
+     , A.BR_ORGCD                                        /* 지점기관코드 */
+     , A.STFNO                                           /* 사원번호 */
+     , (SELECT Z.NM FROM SAM_STF Z WHERE Z.STFNO = A.STFNO) AS STFNM
+     , A.USRNO                                           /* 사용인번호 */
+     , (SELECT Z.NM FROM SAM_STF Z WHERE Z.STFNO = A.USRNO) AS USRNM
+     , A.BZ_FML_CTM_SEQNO                                /* 영업가족고객순번 */
+     , A.HNGL_CTMNM                                      /* 고객한글명 */
+     , A.HNGL_CTMNM AS CTMNM                             /* 고객명 */
+     , A.CTMNO                                           /* 고객번호 */
+     , A.CTM_DSCNO                                       /* 고객식별번호 */
+     , A.SEXCD                                           /* 성별코드 */
+     , A.AGE                                             /* 나이 */
+     , A.INJR_RNK                                        /* 상해급수 */
+     , A.SD                                              /* 시도 */
+     , A.SGNG                                            /* 시군구 */
+     , A.TWMD                                            /* 읍면동 */
+     , A.BRTH                                            /* 생년월일 */
+     , (SELECT JBNM FROM CUS_JB
+        WHERE JBCD = A.JBCD AND JB_CH_SEQNO = (SELECT MAX(JB_CH_SEQNO) FROM CUS_JB WHERE JBCD = A.JBCD)) AS JBNM  /* 직업명 */
+     , (SELECT Z.TLANO || '-' || Z.TLTNO || '-' || Z.STR_TLSNO
+        FROM CUS_BZ_FML_CTM_CNTAD Z
+        WHERE Z.STFNO = CASE WHEN A.USRNO = '9999999' THEN A.STFNO ELSE A.USRNO END
+        AND   Z.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+        AND   Z.CNTAD_FLGCD = '800' AND ROWNUM = 1) AS CTM_HP  /* 고객전화번호 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.AGRE_OR_RQ_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND   IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_AGRE_YN       /* 마케팅동의 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.MKTG_DM_RCV_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND   IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_PST_AGRE_YN   /* 우편동의 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.MKTG_SMS_RCV_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND   IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_MOBL_AGRE_YN  /* 모바일동의 */
+     , NVL((SELECT '1' FROM SFA_SELF_ACT_BJ_CTM Z
+            WHERE Z.STFNO = A.STFNO AND Z.USRNO = A.USRNO
+            AND   Z.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+            AND   Z.ACT_TRGT_RGT_YYMM = (SELECT CASE WHEN SYSDATE BETWEEN IA.CMPG_STRDT AND IA.CMPG_NDDT
+                                                       THEN TO_CHAR(SYSDATE, 'YYYYMM')
+                                                       ELSE TO_CHAR(IA.CMPG_NDDT, 'YYYYMM') END
+                                          FROM SFA_CMPG_INFO IA WHERE IA.CMPG_SEQNO = :inqCmpgSeqno)
+            AND ROWNUM=1), '0') AS PRIO_ACES_CTM_RGT_YN  /* 우선접근고객등록여부 */
+     , A.GNANL_NO                                        /* 보장분석번호 */
+     , NVL((SELECT TO_CHAR(Z.GNANL_DT, 'YYYYMMDD') FROM SFA_GNANL_CTM Z
+            WHERE Z.GNANL_NO = A.GNANL_NO AND Z.GNANL_CTM_SEQNO = A.GNANL_CTM_SEQNO
+            AND ROWNUM=1), '') AS GNANL_DT                /* 최근분석일자 */
+     , A.GNANL_CTM_SEQNO                                 /* 보장분석고객순번 */
+     , A.PLNO                                            /* 가입설계번호(1년내) */
+     , (SELECT C.GD_SLNM FROM INS_INS_PL B, IGD_GD C
+        WHERE B.GDCD = C.GDCD
+        AND   B.PLNO = REGEXP_SUBSTR(A.PLNO,'[^|]+',1,1)
+        AND   B.CGAF_CH_SEQNO = REGEXP_SUBSTR(A.PLNO,'[^|]+',1,2)) AS IS_PL_GDNM  /* 가입설계상품명 */
+     , NVL((SELECT MAX(Z.PLDT) FROM INS_INS_PL Z, INS_PL_RELPC Y
+            WHERE Z.DH_STFNO = A.STFNO AND Y.CTMNO = A.CTMNO
+            AND   Z.PLNO = Y.PLNO AND Z.CGAF_CH_SEQNO = Y.CGAF_CH_SEQNO
+            AND   Z.PLNO = REGEXP_SUBSTR(A.PLNO,'[^|]+',1,1)
+            AND   Z.CGAF_CH_SEQNO = REGEXP_SUBSTR(A.PLNO,'[^|]+',1,2)), '') AS IS_PLDT  /* 가입설계일자 */
+     , (SELECT /*+ INDEX(B I08_INS_CRDIF_INQ_AGR_ADM) */
+               TO_CHAR(MAX(B.AGRE_NDDT), 'YYYY-MM-DD')
+        FROM INS_CRDIF_INQ_AGR_ADM B
+        WHERE B.DH_STFNO = CASE WHEN A.USRNO = '9999999' THEN A.STFNO ELSE A.USRNO END
+        AND   B.CTM_DSCNO = A.CTM_DSCNO
+        AND   B.AGRE_NDDT >= ADD_MONTHS(TO_CHAR(SYSDATE,'yyyyMMdd'), -12)
+        AND   B.CRDIF_INQ_AGRE_MTDCD IN ('01','02','03','05','07','11','12','13','14','17','20','21','22','23','24','25')
+        AND   B.CRDIF_INQ_AGRE_YN = '1'
+        AND   B.WRCS_KNDCD IN ('02','03','05','06')
+        AND   B.AP_ND_DTHMS = TO_TIMESTAMP('99991231000000', 'YYYYMMDDHH24MISS')
+        AND   (CASE WHEN B.CRDIF_INQ_AGRE_MTDCD = '13' AND B.AGRE_RCP_CHNCD IN ('HOM','MHM','BSP') THEN '1'
+                    WHEN B.CRDIF_INQ_AGRE_MTDCD <> '13' THEN '1' ELSE '0' END) = '1'
+        AND   (CASE WHEN B.CRDIF_INQ_AGRE_MTDCD IN ('01','07','11','12') AND B.RCGNT_STCD = '01' THEN '1'
+                    WHEN B.CRDIF_INQ_AGRE_MTDCD NOT IN ('01','07','11','12') THEN '1' ELSE '0' END) = '1'
+       ) AS IS_PL_AGRE_NDDT                              /* 가입설계동의종료일자 */
+     , A.THCP_LATS_IS_YYMD                               /* 당사최근가입년월일 */
+     , A.OTCM_LATS_IS_YYMD                               /* 타사최근가입년월일 */
+     , A.THCP_IS_LTRM_INSCT                              /* 당사장기보험건수 */
+     , A.THCP_IS_LTRM_IBAMT                              /* 당사장기보험금액 */
+     , NVL((SELECT /*+ INDEX(Y I06_INS_CR_RELPC) */ MAX(TO_CHAR(Z.CNRDT,'YYYYMMDD'))
+            FROM INS_CR_RELPC Y, INS_INS_CR Z
+            WHERE Z.FNL_DH_STFNO = A.STFNO AND Y.CTMNO = A.CTMNO AND Z.PLYNO = Y.PLYNO
+            AND   Z.AP_NDDT = TO_DATE('99991231','YYYYMMDD') AND Y.AP_NDDT = TO_DATE('99991231','YYYYMMDD')
+            AND   Z.FNL_CR_STCD = '00' AND Z.IKD_GRPCD IN ('LA','MA','FA','CA')
+            AND   Z.VALD_NDS_YN = '1' AND Y.VALD_NDS_YN = '1' AND Y.RELPC_TPCD = '01'
+            AND   Z.CNRDT BETWEEN ADD_MONTHS(TO_CHAR(SYSDATE,'yyyyMMdd'), -12) AND TO_CHAR(SYSDATE,'yyyyMMdd')
+           ), '') AS LATS_CRCC_DT                         /* 최근보험체결일자 */
+     , NVL((SELECT /*+ INDEX(Y I06_INS_CR_RELPC) */ COUNT(Z.PLYNO)
+            FROM INS_CR_RELPC Y, INS_INS_CR Z
+            WHERE Z.FNL_DH_STFNO = A.STFNO AND Y.CTMNO = A.CTMNO AND Z.PLYNO = Y.PLYNO
+            AND   Z.AP_NDDT = TO_DATE('99991231','YYYYMMDD') AND Y.AP_NDDT = TO_DATE('99991231','YYYYMMDD')
+            AND   Z.FNL_CR_STCD = '00' AND Z.IKD_GRPCD IN ('LA','MA','FA','CA')
+            AND   Z.VALD_NDS_YN = '1' AND Y.VALD_NDS_YN = '1' AND Y.RELPC_TPCD = '01'
+            AND   Z.CNRDT BETWEEN ADD_MONTHS(TO_CHAR(SYSDATE,'yyyyMMdd'), -12) AND TO_CHAR(SYSDATE,'yyyyMMdd')
+           ), '') AS LATS_CRCC_CT                         /* 최근보험체결건수 */
+     , NVL((SELECT /*+ INDEX(Y I06_INS_CR_RELPC) */ SUM(SF_LTR_GET_AP_PRM(Z.IKD_GRPCD, Z.PLYNO))
+            FROM INS_CR_RELPC Y, INS_INS_CR Z
+            WHERE Z.FNL_DH_STFNO = A.STFNO AND Y.CTMNO = A.CTMNO AND Z.PLYNO = Y.PLYNO
+            AND   Z.AP_NDDT = TO_DATE('99991231','YYYYMMDD') AND Y.AP_NDDT = TO_DATE('99991231','YYYYMMDD')
+            AND   Z.FNL_CR_STCD = '00' AND Z.IKD_GRPCD IN ('LA','MA','FA','CA')
+            AND   Z.VALD_NDS_YN = '1' AND Y.VALD_NDS_YN = '1' AND Y.RELPC_TPCD = '01'
+            AND   Z.CNRDT BETWEEN ADD_MONTHS(TO_CHAR(SYSDATE,'yyyyMMdd'), -12) AND TO_CHAR(SYSDATE,'yyyyMMdd')
+           ), '') AS LATS_CRCC_IBAMT                      /* 최근보험체결보험료 */
+     , NVL((SELECT BORN_YR FROM CUS_BZ_FML_CTM CBFC
+            WHERE CBFC.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+            AND   CBFC.STFNO = CASE WHEN A.USRNO = '9999999' THEN A.STFNO ELSE A.USRNO END), '') AS CTM_BORN_YR
+     , NVL((SELECT BORN_MNDY FROM CUS_BZ_FML_CTM CBFC
+            WHERE CBFC.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+            AND   CBFC.STFNO = CASE WHEN A.USRNO = '9999999' THEN A.STFNO ELSE A.USRNO END), '') AS CTM_BORN_MNDY
+     , (SELECT Z.STR_TLSNO FROM CUS_BZ_FML_CTM_CNTAD Z
+        WHERE Z.STFNO = CASE WHEN A.USRNO = '9999999' THEN A.STFNO ELSE A.USRNO END
+        AND   Z.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+        AND   Z.CNTAD_FLGCD = '800' AND ROWNUM = 1) AS CTM_TLNO_SNO  /* 전화번호 뒷자리 */
+FROM   (SELECT X.*
+             , NVL((SELECT MAX(Z.PLNO ||'|'|| Z.CGAF_CH_SEQNO)
+                    FROM INS_INS_PL Z, INS_PL_RELPC Y
+                    WHERE Z.DH_STFNO = X.STFNO AND Y.CTMNO = X.CTMNO
+                    AND   Z.PLNO = Y.PLNO AND Z.CGAF_CH_SEQNO = Y.CGAF_CH_SEQNO
+                    AND   Y.RELPC_TPCD = '01' AND Z.IKD_GRPCD IN ('LA','MA','FA','CA')
+                    AND   Z.VALD_PL_YN = '1' AND Z.PL_FLGCD = '01'
+                    AND   Z.PL_STCD IN ('03','04','05','06','07','08','09')
+                    AND   Z.PLDT BETWEEN ADD_MONTHS(TO_CHAR(SYSDATE,'yyyyMMdd'), -12) AND TO_CHAR(SYSDATE,'yyyyMMdd')
+                    AND   ROWNUM=1), '0') AS PLNO
+             , NVL((SELECT JBCD FROM CUS_BZ_FML_CTM CBFC
+                    WHERE CBFC.BZ_FML_CTM_SEQNO = X.BZ_FML_CTM_SEQNO
+                    AND   CBFC.STFNO = CASE WHEN X.USRNO = '9999999' THEN X.STFNO ELSE X.USRNO END), '') AS JBCD
+             , NVL((CASE WHEN X.SEXCD = '03'
+                         THEN (SELECT Z.CTM_DSCNO FROM CUS_CTM Z WHERE Z.CTMNO = X.CTMNO AND ROWNUM = 1)
+                         ELSE (SELECT Z.CTM_DSCNO FROM CUS_BZ_FML_CTM Z
+                               WHERE Z.STFNO = CASE WHEN X.USRNO = '9999999' THEN X.STFNO ELSE X.USRNO END
+                               AND   Z.BZ_FML_CTM_SEQNO = X.BZ_FML_CTM_SEQNO AND ROWNUM = 1)
+                    END), '') AS CTM_DSCNO
+        FROM   (SELECT ROW_NUMBER() OVER(ORDER BY A.STFNO, A.HNGL_CTMNM,
+                       DECODE(A.BZ_FMLCU_FLGCD, '20', 1, '90', 2, 3)) AS RNO
+                     , A.*
+                FROM   SFA_CTM_INFO_CTM_CND A
+                WHERE  1=1
+                -- === 동적 WHERE 조건 ===
+                -- AND    A.BR_ORGCD = :inqBrOrgcd
+                -- AND    A.STFNO = :inqStfno
+                -- AND    A.USRNO = :inqUsrno
+               ) X
+        WHERE  1=1
+        AND    X.RNO BETWEEN (:pageNo - 1) * :pageSize + 1 AND :pageNo * :pageSize
+       ) A;
+주요 바인드 변수 정리
+변수명	설명	예시값
+:inqStfno	사원번호	'0012345'
+:inqUsrno	사용인번호	'0012345'
+:inqBzFmlCtmSeqno	영업가족고객순번	1
+:inqBrOrgcd	지점기관코드	'1234'
+:inqBzFmlcuFlgcd	영업가족고객구분	'20'(계약자), '10'(피보험자), '90'(가망)
+:inqCtmHnglnm	고객한글명	'홍길동'
+:inqSd	시도	'서울특별시'
+:inqSgng	시군구	'강남구'
+:inqTwmd	읍면동	'역삼동'
+:inqCmpgSeqno	캠페인순번	100
+:inqStrDt	조회시작일시	'20250101000000'
+:inqNdDt	조회종료일시	'20251231235959'
+:pageNo	페이지번호	1
+:pageSize	페이지크기	20
+
+1. 테이블 존재여부 조회
+
+-- selectSfaCtmInfoCvrCndXstnYn: 담보조건 테이블 존재여부
+SELECT COUNT(1)
+FROM   SFA_CTM_INFO_CVR_CND A
+WHERE  1=1
+AND    ROWNUM = 1;
+2. 고객정보 상세 조회 (특정 고객 1건)
+
+-- selectCtmInfo: 담보조건 고객정보 상세 조회
+SELECT A.STFNO                                   /* 직원번호 */
+     , A.USRNO                                   /* 사용인번호 */
+     , A.BZ_FML_CTM_SEQNO                        /* 영업가족고객순번 */
+     , A.BR_ORGCD                                /* 지점기관코드 */
+     , A.HNGL_CTMNM                              /* 한글고객명 */
+     , A.CTMNO                                   /* 고객번호 */
+     , A.SEXCD                                   /* 성별 */
+     , A.AGE                                     /* 연령 */
+     , A.SD                                      /* 시도 */
+     , A.SGNG                                    /* 시군구 */
+     , A.TWMD                                    /* 읍면동 */
+     , A.INJR_RNK                                /* 상해급수 */
+     , A.GNANL_NO                                /* 보장분석번호 */
+     , A.GNANL_CTM_SEQNO                         /* 보장분석고객순번 */
+     -- === 상품군 가입여부 ===
+     , A.GNRZ_GD_ISYN                            /* 종합상품 */
+     , A.DRV_INS_ISYN                            /* 운전자 */
+     , A.CHD_INS_ISYN                            /* 자녀 */
+     , A.SPL_INS_ISYN                            /* 간편 */
+     , A.CANCR_INS_ISYN                          /* 암 */
+     , A.NRDSS_INS_ISYN                          /* 간병 */
+     , A.SGRMI_INS_ISYN                          /* 단독실손 */
+     , A.PRPRT_INS_ISYN                          /* 재물 */
+     , A.DSAS_INS_ISYN                           /* 질병 */
+     , A.INJR_PRV_OTINS_ISYN                     /* 상해기타 */
+     -- === 다빈도질병수술비 가입여부 ===
+     , A.DSAS_OPCCS_14_KND_ISYN                  /* 14종 */
+     , A.DSAS_OPCCS_16_KND_ISYN                  /* 16종 */
+     , A.DSAS_OPCCS_18_KND_ISYN                  /* 18종 */
+     , A.DSAS_OPCCS_34_KND_ISYN                  /* 34종 */
+     , A.DSAS_OPCCS_56_KND_ISYN                  /* 56종 */
+     , A.DSAS_OPCCS_121_KND_ISYN                 /* 121종 */
+     -- === 당사 담보금액 ===
+     , A.DSDE_AMT                                /* 질병사망 */
+     , A.INJR_DE_AMT                             /* 상해사망 */
+     , A.CANCR_DE_AMT                            /* 암사망 */
+     , A.TRF_INJR_DE_AMT                         /* 교통상해사망 */
+     , A.DSAS_SLOBS_AMT                          /* 질병후유장해 */
+     , A.DSAS_DGR_SLOBS_AMT                      /* 질병고도후유장해 */
+     , A.INJR_SLOBS_AMT                          /* 상해후유장해 */
+     , A.INJR_DGR_SLOBS_AMT                      /* 상해고도후유장해 */
+     , A.SMLY_CANCR_DASCS_AMT                    /* 유사암진단비 */
+     , A.CANCR_DASCS_AMT                         /* 암진단비 */
+     , A.HAMT_CANCR_DASCS_AMT                    /* 고액암진단비 */
+     , A.RE_DGN_CANCR_AMT                        /* 재진단암 */
+     , A.CANCR_HSP_DDALW_AMT                     /* 암입원일당 */
+     , A.CANCR_OPCCS_AMT                         /* 암수술비 */
+     , A.CRLR_DSAS_DASCS_AMT                     /* 뇌혈관질환진단비 */
+     , A.STRK_DASCS_AMT                          /* 뇌졸중진단비 */
+     , A.CBHMH_DASCS_AMT                         /* 뇌출혈진단비 */
+     , A.CRLR_DSAS_OPCCS_AMT                     /* 뇌혈관질환수술비 */
+     , A.ISMC_HEART_DSAS_DASCS_AMT               /* 허혈성심장질환진단비 */
+     , A.AMIFN_INCR_DASCS_AMT                    /* 급성심근경색증진단비 */
+     , A.ISMC_HEART_DSAS_OPCCS_AMT               /* 허혈성심장질환수술비 */
+     , A.CI_AMT                                  /* CI */
+     , A.GI_AMT                                  /* GI */
+     , A.DSAS_HSP_RLPMI_AMT                      /* 질병입원실손 */
+     , A.DSAS_OTP_RLPMI_AMT                      /* 질병통원실손 */
+     , A.INJR_HSP_RLPMI_AMT                      /* 상해입원실손 */
+     , A.INJR_OTP_RLPMI_AMT                      /* 상해통원실손 */
+     , A.DSAS_HSP_DDALW_1_AMT                    /* 질병입원일당(1일~) */
+     , A.DSAS_HSP_DDALW_4_AMT                    /* 질병입원일당(4일~) */
+     , A.INJR_HSP_DDALW_1_AMT                    /* 상해입원일당(1일~) */
+     , A.INJR_HSP_DDALW_4_AMT                    /* 상해입원일당(4일~) */
+     , A.DSAS_OPCCS_AMT                          /* 질병수술비 */
+     , A.INJR_OPCCS_AMT                          /* 상해수술비 */
+     , A.MILD_DEMEN_AMT                          /* 경증치매 */
+     , A.SERI_DEMEN_AMT                          /* 중증치매 */
+     , A.LTRM_RCPR_DGN_RANK4_AMT                 /* 장기요양4급 */
+     , A.LTRM_RCPR_DGN_RANK1_AMT                 /* 장기요양1급 */
+     , A.BDIN_CCA_SUAMT_AMT                      /* 대인형사합의지원금 */
+     , A.LWR_SNRT_CS_AMT                         /* 변호사선임비용 */
+     , A.DRV_PNLTY_AMT                           /* 운전자벌금 */
+     , A.AUTO_CRCLM_INJ_URAMT                    /* 자동차사고부상 */
+     , A.FIRE_PNLTY_AMT                          /* 화재벌금 */
+     , A.USLLF_LBTRS_AMT                         /* 일상생활배상책임 */
+     , A.IMPL_MDCF_AMT                           /* 임플란트치료비 */
+     , A.CROW_MDCF_AMT                           /* 크라운치료비 */
+     , A.FRCTR_DASCS_AMT                         /* 골절진단비 */
+     , A.BURN_DASCS_AMT                          /* 화상진단비 */
+     , A.FOCUS_ANTI_MEDI_APPR_MDCF               /* 표적항암약물허가치료비 */
+     -- === 타사 담보금액 (OTCM_ 접두사로 동일 항목) ===
+     , A.OTCM_DSDE_AMT                           /* 타사 질병사망 */
+     , A.OTCM_INJR_DE_AMT                        /* 타사 상해사망 */
+     , A.OTCM_CANCR_DASCS_AMT                    /* 타사 암진단비 */
+     -- ... (타사 항목 약 30개 동일 구조 생략)
+FROM   SFA_CTM_INFO_CVR_CND A
+WHERE  1=1
+AND    A.STFNO = :inqStfno                       -- [필수] 직원번호
+AND    A.USRNO = :inqUsrno                       -- [필수] 사용인번호
+AND    A.BZ_FML_CTM_SEQNO = :inqBzFmlCtmSeqno;  -- [필수] 영업가족고객순번
+3. 담보특성조건 고객 건수 조회
+
+-- countCvrSpquCndCtmList: 담보특성조건 고객 총 건수
+SELECT COUNT(1) AS TOT_CT
+FROM   (
+       SELECT A.*
+            -- 타사정보 반영 시 SUM_ 컬럼으로 당사+타사 합산
+            , A.DSDE_AMT + A.OTCM_DSDE_AMT                       AS SUM_DSDE_AMT
+            , A.INJR_DE_AMT + A.OTCM_INJR_DE_AMT                 AS SUM_INJR_DE_AMT
+            , A.CANCR_DE_AMT + A.OTCM_CANCR_DE_AMT               AS SUM_CANCR_DE_AMT
+            , A.TRF_INJR_DE_AMT + A.OTCM_TRF_INJR_DE_AMT         AS SUM_TRF_INJR_DE_AMT
+            , A.DSAS_SLOBS_AMT + A.OTCM_DSAS_SLOBS_AMT           AS SUM_DSAS_SLOBS_AMT
+            , A.CANCR_DASCS_AMT + A.OTCM_CANCR_DASCS_AMT         AS SUM_CANCR_DASCS_AMT
+            , A.CRLR_DSAS_DASCS_AMT + A.OTCM_CRLR_DSAS_DASCS_AMT AS SUM_CRLR_DSAS_DASCS_AMT
+            , A.ISMC_HEART_DSAS_DASCS_AMT + A.OTCM_ISMC_HEART_DSAS_DASCS_AMT AS SUM_ISMC_HEART_DSAS_DASCS_AMT
+            , A.CI_AMT + A.OTCM_CI_AMT                           AS SUM_CI_AMT
+            , A.GI_AMT + A.OTCM_GI_AMT                           AS SUM_GI_AMT
+            , A.DSAS_HSP_RLPMI_AMT + A.OTCM_DSAS_HSP_RLPMI_AMT   AS SUM_DSAS_HSP_RLPMI_AMT
+            -- ... (나머지 40여개 SUM_ 컬럼 동일 패턴)
+       FROM   SFA_CTM_INFO_CVR_CND A
+       WHERE  1=1
+       -- AND    A.BR_ORGCD = :inqBrOrgcd
+       -- AND    A.STFNO = :inqStfno
+       -- AND    A.USRNO = :inqUsrno
+       ) X
+WHERE  1=1
+-- === 기본 검색조건 ===
+-- AND    X.SEXCD IN ('01','02')                       -- 성별
+-- AND    (X.AGE >= 30 AND X.AGE < 40)                 -- 나이대
+-- AND    X.SD = :inqSd                                -- 시도
+-- AND    X.SGNG = :inqSgng                            -- 시군구
+-- AND    X.TWMD = :inqTwmd                            -- 읍면동
+-- AND    (X.INJR_RNK = 1 OR X.INJR_RNK = 2 OR X.INJR_RNK >= 3)  -- 상해급수
+-- === 상품군 조건 ===
+-- AND    X.GNRZ_GD_ISYN = '1'                         -- 종합상품가입
+-- AND    X.DRV_INS_ISYN = '1'                         -- 운전자보험가입
+-- AND    X.CANCR_INS_ISYN = '0'                       -- 암보험미가입
+-- === 다빈도 질병수술비 (미가입 조건 예시) ===
+-- AND    X.DSAS_OPCCS_14_KND_ISYN = '0'
+-- AND    X.DSAS_OPCCS_16_KND_ISYN = '0'
+-- AND    X.DSAS_OPCCS_18_KND_ISYN = '0'
+-- AND    X.DSAS_OPCCS_34_KND_ISYN = '0'
+-- AND    X.DSAS_OPCCS_56_KND_ISYN = '0'
+-- AND    X.DSAS_OPCCS_121_KND_ISYN = '0'
+-- === 담보금액 조건 (타사반영: SUM_ 사용 / 타사미반영: 당사 컬럼 직접) ===
+-- [타사반영 예시] 암진단비 합산 2000만~3000만 사이
+-- AND    X.SUM_CANCR_DASCS_AMT BETWEEN 20000000 AND 30000000
+-- [타사미반영 예시] 당사 암진단비 0초과 ~ 3000만 미만
+-- AND    (X.CANCR_DASCS_AMT > 0 AND X.CANCR_DASCS_AMT < 30000000)
+-- [0원 조건]
+-- AND    X.SUM_DSDE_AMT = 0
+-- [최대값 이상 조건]
+-- AND    X.SUM_INJR_DE_AMT >= 300000000
+;
+4. 담보특성조건 고객목록 조회 (페이징)
+
+-- selectCvrSpquCndCtmList: 담보특성조건 고객목록 조회
+SELECT A.RNO                                      /* 조회순번 */
+     , A.BR_ORGCD                                 /* 지점기관코드 */
+     , A.STFNO                                    /* 사원번호 */
+     , (SELECT Z.NM FROM SAM_STF Z WHERE Z.STFNO = A.STFNO) AS STFNM
+     , A.USRNO                                    /* 사용인번호 */
+     , (SELECT Z.NM FROM SAM_STF Z WHERE Z.STFNO = A.USRNO) AS USRNM
+     , A.BZ_FML_CTM_SEQNO                         /* 영업가족고객순번 */
+     , A.CTMNO                                    /* 고객번호 */
+     , A.HNGL_CTMNM                               /* 고객명 */
+     , NVL((CASE WHEN A.SEXCD = '03'
+                 THEN (SELECT Z.CTM_DSCNO FROM CUS_CTM Z WHERE Z.CTMNO = A.CTMNO AND ROWNUM = 1)
+                 ELSE (SELECT Z.CTM_DSCNO FROM CUS_BZ_FML_CTM Z
+                       WHERE Z.STFNO = A.STFNO AND Z.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO AND ROWNUM = 1)
+            END), '') AS CTM_DSCNO                /* 고객식별번호 */
+     , A.GNANL_NO                                 /* 보장분석번호 */
+     , A.GNANL_CTM_SEQNO                          /* 보장분석고객순번 */
+     , NVL((SELECT TO_CHAR(Z.GNANL_DT, 'YYYYMMDD') FROM SFA_GNANL_CTM Z
+            WHERE Z.GNANL_NO = A.GNANL_NO AND Z.GNANL_CTM_SEQNO = A.GNANL_CTM_SEQNO
+            AND ROWNUM=1), '') AS GNANL_DT        /* 최근분석일자 */
+     , A.SEXCD                                    /* 성별코드 */
+     , A.AGE                                      /* 나이 */
+     , A.INJR_RNK                                 /* 상해급수 */
+     , (SELECT Z.TLANO || '-' || Z.TLTNO || '-' || Z.STR_TLSNO
+        FROM CUS_BZ_FML_CTM_CNTAD Z
+        WHERE Z.STFNO = A.STFNO AND Z.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+        AND Z.CNTAD_FLGCD = '800' AND ROWNUM = 1) AS CTM_HPNO  /* 고객 휴대전화 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.AGRE_OR_RQ_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_AGRE_YN       /* 마케팅활용동의 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.MKTG_DM_RCV_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_PST_AGRE_YN   /* 마케팅우편동의 */
+     , (SELECT /*+ INDEX_DESC(IA PK1_CUS_PSN_CRDIF_UTAGR_CRR) */
+               CASE WHEN ADD_MONTHS(IA.AP_STR_DTHMS, 60) < SYSDATE THEN '0' ELSE IA.MKTG_SMS_RCV_YN END
+        FROM CUS_PSN_CRDIF_UTAGR_CRR IA
+        WHERE IA.CTMNO = A.CTMNO AND IA.CRDIF_UTL_AGRE_FLGCD = '11'
+        AND IA.AP_ND_DTHMS > SYSDATE AND ROWNUM = 1) AS MKTG_MOBL_AGRE_YN  /* 마케팅모바일동의 */
+     , NVL((SELECT '1' FROM SFA_SELF_ACT_BJ_CTM Z
+            WHERE Z.STFNO = A.STFNO AND Z.USRNO = A.USRNO
+            AND Z.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+            AND Z.ACT_TRGT_RGT_YYMM = (SELECT CASE WHEN SYSDATE BETWEEN IA.CMPG_STRDT AND IA.CMPG_NDDT
+                                                     THEN TO_CHAR(SYSDATE, 'YYYYMM')
+                                                     ELSE TO_CHAR(IA.CMPG_NDDT, 'YYYYMM') END
+                                        FROM SFA_CMPG_INFO IA WHERE IA.CMPG_SEQNO = :inqCmpgSeqno)
+            AND ROWNUM=1), '0') AS PRIO_ACES_CTM_BJ_YN  /* 우선접근고객등록여부 */
+     , NVL((SELECT MAX(Z.PLNO ||'|'|| Z.CGAF_CH_SEQNO)
+            FROM INS_INS_PL Z, INS_PL_RELPC Y
+            WHERE Z.DH_STFNO = A.STFNO AND Y.CTMNO = A.CTMNO
+            AND Z.PLNO = Y.PLNO AND Z.CGAF_CH_SEQNO = Y.CGAF_CH_SEQNO
+            AND Y.RELPC_TPCD IN ('01','02')
+            AND Z.IKD_GRPCD IN ('LA','MA','FA','CA')
+            AND Z.VALD_PL_YN = '1' AND Z.PL_FLGCD = '01'
+            AND Z.PL_STCD IN ('03','04','05','06','07','08','09')
+            AND Z.PLDT BETWEEN TO_DATE(:inqStrDt, 'YYYYMMDDHH24MISS') AND TO_DATE(:inqNdDt, 'YYYYMMDDHH24MISS')
+            AND ROWNUM=1), '0') AS PLNO           /* 가입설계번호 */
+     -- === 당사 담보금액 (40여 항목) ===
+     , A.DSDE_AMT, A.INJR_DE_AMT, A.CANCR_DE_AMT, A.TRF_INJR_DE_AMT
+     , A.DSAS_SLOBS_AMT, A.DSAS_DGR_SLOBS_AMT, A.INJR_SLOBS_AMT, A.INJR_DGR_SLOBS_AMT
+     , A.SMLY_CANCR_DASCS_AMT, A.CANCR_DASCS_AMT, A.HAMT_CANCR_DASCS_AMT, A.RE_DGN_CANCR_AMT
+     , A.CANCR_HSP_DDALW_AMT, A.CANCR_OPCCS_AMT
+     , A.CRLR_DSAS_DASCS_AMT, A.STRK_DASCS_AMT, A.CBHMH_DASCS_AMT, A.CRLR_DSAS_OPCCS_AMT
+     , A.ISMC_HEART_DSAS_DASCS_AMT, A.AMIFN_INCR_DASCS_AMT, A.ISMC_HEART_DSAS_OPCCS_AMT
+     , A.CI_AMT, A.GI_AMT
+     , A.DSAS_HSP_RLPMI_AMT, A.DSAS_OTP_RLPMI_AMT, A.INJR_HSP_RLPMI_AMT, A.INJR_OTP_RLPMI_AMT
+     , A.DSAS_HSP_DDALW_1_AMT, A.DSAS_HSP_DDALW_4_AMT, A.INJR_HSP_DDALW_1_AMT, A.INJR_HSP_DDALW_4_AMT
+     , A.DSAS_OPCCS_AMT, A.INJR_OPCCS_AMT
+     , A.MILD_DEMEN_AMT, A.SERI_DEMEN_AMT, A.LTRM_RCPR_DGN_RANK4_AMT, A.LTRM_RCPR_DGN_RANK1_AMT
+     , A.BDIN_CCA_SUAMT_AMT, A.LWR_SNRT_CS_AMT, A.DRV_PNLTY_AMT
+     , A.AUTO_CRCLM_INJ_URAMT, A.FIRE_PNLTY_AMT, A.USLLF_LBTRS_AMT
+     , A.IMPL_MDCF_AMT, A.CROW_MDCF_AMT, A.FRCTR_DASCS_AMT, A.BURN_DASCS_AMT
+     -- === 타사 담보금액 (OTCM_ 접두사, 동일 항목) ===
+     , A.OTCM_DSDE_AMT, A.OTCM_INJR_DE_AMT, A.OTCM_CANCR_DE_AMT
+     , A.OTCM_CANCR_DASCS_AMT, A.OTCM_CRLR_DSAS_DASCS_AMT
+     -- ... (타사 항목 동일 구조)
+     -- === 당사+타사 합산 (SUM_ 접두사) ===
+     , A.SUM_DSDE_AMT, A.SUM_INJR_DE_AMT, A.SUM_CANCR_DE_AMT
+     , A.SUM_CANCR_DASCS_AMT, A.SUM_CRLR_DSAS_DASCS_AMT
+     -- ... (합산 항목 동일 구조)
+     , CASE WHEN (SELECT COUNT(1) FROM SFA_CTM_INFO_CTM_CND IA
+                  WHERE IA.STFNO = A.STFNO AND IA.USRNO = A.USRNO
+                  AND IA.BZ_FML_CTM_SEQNO = A.BZ_FML_CTM_SEQNO
+                  AND IA.BZ_FMLCU_FLGCD IN ('20','90')
+                  AND IA.PSN_IC_YN IS NOT NULL) > 0
+            THEN '1' ELSE '0' END AS IF_IC_YN    /* 추정소득여부 */
+FROM   (SELECT Y.*
+        FROM   (SELECT ROW_NUMBER() OVER(ORDER BY X.STFNO, X.HNGL_CTMNM) AS RNO
+                     , X.*
+                FROM   (SELECT A.*
+                             , A.DSDE_AMT + A.OTCM_DSDE_AMT AS SUM_DSDE_AMT
+                             , A.INJR_DE_AMT + A.OTCM_INJR_DE_AMT AS SUM_INJR_DE_AMT
+                             , A.CANCR_DE_AMT + A.OTCM_CANCR_DE_AMT AS SUM_CANCR_DE_AMT
+                             , A.CANCR_DASCS_AMT + A.OTCM_CANCR_DASCS_AMT AS SUM_CANCR_DASCS_AMT
+                             -- ... (나머지 SUM_ 컬럼 동일 패턴)
+                        FROM   SFA_CTM_INFO_CVR_CND A
+                        WHERE  1=1
+                        -- AND    A.BR_ORGCD = :inqBrOrgcd
+                        -- AND    A.STFNO = :inqStfno
+                        -- AND    A.USRNO = :inqUsrno
+                       ) X
+                WHERE  1=1
+                -- === 담보 검색조건 (아래 참조) ===
+                -- AND    X.SEXCD IN ('01','02')
+                -- AND    (X.AGE >= 30 AND X.AGE < 40)
+                -- AND    X.SUM_CANCR_DASCS_AMT BETWEEN 20000000 AND 30000000
+               ) Y
+        WHERE  Y.RNO BETWEEN (:pageNo - 1) * :pageSize + 1 AND :pageNo * :pageSize
+       ) A;
+담보금액 조건 패턴 정리
+모든 담보금액 검색 조건은 아래 3가지 패턴 중 하나를 따릅니다.
+
+패턴 A: 직접 범위 입력 (시작~종료 만원 단위)
+
+-- 예: 암진단비 2000만~3000만
+AND X.SUM_CANCR_DASCS_AMT BETWEEN (2000 * 10000) AND (3000 * 10000)
+패턴 B: 구간 선택 (0원 / 0초과~N미만 / N이상)
+
+-- 0원인 고객
+AND X.SUM_CANCR_DASCS_AMT = 0
+
+-- 0초과 ~ 3000만 미만
+AND (X.SUM_CANCR_DASCS_AMT > 0 AND X.SUM_CANCR_DASCS_AMT < 30000000)
+
+-- 5000만 이상
+AND X.SUM_CANCR_DASCS_AMT >= 50000000
+타사반영 여부에 따른 컬럼 사용
+타사반영(inqOtcmIsInfoRfltYn)	사용 컬럼	설명
+= 1 (반영)	SUM_xxx_AMT	당사 + 타사 합산
+= 0 (미반영)	xxx_AMT (OTCM 없음)	당사만
+전체 담보항목 목록 (40종)
+항목	당사 컬럼	합산 컬럼 (SUM_)
+질병사망	DSDE_AMT	SUM_DSDE_AMT
+상해사망	INJR_DE_AMT	SUM_INJR_DE_AMT
+암사망	CANCR_DE_AMT	SUM_CANCR_DE_AMT
+교통상해사망	TRF_INJR_DE_AMT	SUM_TRF_INJR_DE_AMT
+질병후유장해	DSAS_SLOBS_AMT	SUM_DSAS_SLOBS_AMT
+질병고도후유장해	DSAS_DGR_SLOBS_AMT	SUM_DSAS_DGR_SLOBS_AMT
+상해후유장해	INJR_SLOBS_AMT	SUM_INJR_SLOBS_AMT
+상해고도후유장해	INJR_DGR_SLOBS_AMT	SUM_INJR_DGR_SLOBS_AMT
+유사암진단비	SMLY_CANCR_DASCS_AMT	SUM_SMLY_CANCR_DASCS_AMT
+암진단비	CANCR_DASCS_AMT	SUM_CANCR_DASCS_AMT
+고액암진단비	HAMT_CANCR_DASCS_AMT	SUM_HAMT_CANCR_DASCS_AMT
+재진단암	RE_DGN_CANCR_AMT	SUM_RE_DGN_CANCR_AMT
+표적항암약물허가치료비	FOCUS_ANTI_MEDI_APPR_MDCF	SUM_FOCUS_ANTI_MEDI_APPR_MDCF
+암입원일당	CANCR_HSP_DDALW_AMT	SUM_CANCR_HSP_DDALW_AMT
+암수술비	CANCR_OPCCS_AMT	SUM_CANCR_OPCCS_AMT
+뇌혈관질환진단비	CRLR_DSAS_DASCS_AMT	SUM_CRLR_DSAS_DASCS_AMT
+뇌졸중진단비	STRK_DASCS_AMT	SUM_STRK_DASCS_AMT
+뇌출혈진단비	CBHMH_DASCS_AMT	SUM_CBHMH_DASCS_AMT
+뇌혈관질환수술비	CRLR_DSAS_OPCCS_AMT	SUM_CRLR_DSAS_OPCCS_AMT
+허혈성심장질환진단비	ISMC_HEART_DSAS_DASCS_AMT	SUM_ISMC_HEART_DSAS_DASCS_AMT
+급성심근경색증진단비	AMIFN_INCR_DASCS_AMT	SUM_AMIFN_INCR_DASCS_AMT
+허혈성심장질환수술비	ISMC_HEART_DSAS_OPCCS_AMT	SUM_ISMC_HEART_DSAS_OPCCS_AMT
+CI	CI_AMT	SUM_CI_AMT
+GI	GI_AMT	SUM_GI_AMT
+질병입원실손	DSAS_HSP_RLPMI_AMT	SUM_DSAS_HSP_RLPMI_AMT
+질병통원실손	DSAS_OTP_RLPMI_AMT	SUM_DSAS_OTP_RLPMI_AMT
+상해입원실손	INJR_HSP_RLPMI_AMT	SUM_INJR_HSP_RLPMI_AMT
+상해통원실손	INJR_OTP_RLPMI_AMT	SUM_INJR_OTP_RLPMI_AMT
+질병입원일당(1일~)	DSAS_HSP_DDALW_1_AMT	SUM_DSAS_HSP_DDALW_1_AMT
+질병입원일당(4일~)	DSAS_HSP_DDALW_4_AMT	SUM_DSAS_HSP_DDALW_4_AMT
+상해입원일당(1일~)	INJR_HSP_DDALW_1_AMT	SUM_INJR_HSP_DDALW_1_AMT
+상해입원일당(4일~)	INJR_HSP_DDALW_4_AMT	SUM_INJR_HSP_DDALW_4_AMT
+질병수술비	DSAS_OPCCS_AMT	SUM_DSAS_OPCCS_AMT
+상해수술비	INJR_OPCCS_AMT	SUM_INJR_OPCCS_AMT
+경증치매	MILD_DEMEN_AMT	SUM_MILD_DEMEN_AMT
+중증치매	SERI_DEMEN_AMT	SUM_SERI_DEMEN_AMT
+장기요양4급	LTRM_RCPR_DGN_RANK4_AMT	SUM_LTRM_RCPR_DGN_RANK4_AMT
+장기요양1급	LTRM_RCPR_DGN_RANK1_AMT	SUM_LTRM_RCPR_DGN_RANK1_AMT
+대인형사합의지원금	BDIN_CCA_SUAMT_AMT	SUM_BDIN_CCA_SUAMT_AMT
+변호사선임비용	LWR_SNRT_CS_AMT	SUM_LWR_SNRT_CS_AMT
+운전자벌금	DRV_PNLTY_AMT	SUM_DRV_PNLTY_AMT
+자동차사고부상	AUTO_CRCLM_INJ_URAMT	SUM_AUTO_CRCLM_INJ_URAMT
+화재벌금	FIRE_PNLTY_AMT	SUM_FIRE_PNLTY_AMT
+일상생활배상책임	USLLF_LBTRS_AMT	SUM_USLLF_LBTRS_AMT
+임플란트치료비	IMPL_MDCF_AMT	SUM_IMPL_MDCF_AMT
+크라운치료비	CROW_MDCF_AMT	SUM_CROW_MDCF_AMT
+골절진단비	FRCTR_DASCS_AMT	SUM_FRCTR_DASCS_AMT
+화상진단비	BURN_DASCS_AMT	SUM_BURN_DASCS_AMT
+주요 바인드 변수
+변수명	설명	예시값
+:inqStfno	사원번호	'0012345'
+:inqUsrno	사용인번호	'0012345'
+:inqBzFmlCtmSeqno	영업가족고객순번	1
+:inqBrOrgcd	지점기관코드	'1234'
+:inqCmpgSeqno	캠페인순번	100
+:inqStrDt / :inqNdDt	조회기간	'20250101000000' / '20251231235959'
+:pageNo / :pageSize	페이지	1 / 20
+
+1. Daily 필수터치 고객목록 건수 조회
+
+-- countDybEssnTouCtmList: Daily필수터치 고객 건수
+SELECT COUNT(*) AS CNT
+FROM   SFA_DALY_ESSN_TOU_CTM A   /* Daily필수터치고객 */
+     , SAM_STF B                  /* 직원 */
+WHERE  A.STFNO = B.STFNO
+AND    B.STF_BZ_STCD = '01'              /* 영업상태: 재직 */
+AND    B.STF_FLGCD IN ('02','03','04')   /* 직원구분: 설계사, 대리점, 중개인 */
+AND    B.ATCH_YN = '1'                   /* 전속여부 */
+-- [선택] 조회기간 - 일별(D)
+-- AND    TRGT_INQDT BETWEEN TO_DATE(:inqStYymd) AND TO_DATE(:inqStYymd || '235959', 'YYYYMMDDHH24MISS')
+-- [선택] 조회기간 - 월별(M)
+-- AND    TRGT_INQDT BETWEEN TO_DATE(:inqStYymd) AND LAST_DAY(:inqStYymd) + 0.99999
+-- [선택] FP(사원번호)
+-- AND    A.STFNO = :inqStfno
+-- [선택] 지점
+-- AND    B.CRNT_ORGCD = :inqCrntOrgcd
+-- [선택] 팀
+-- AND    B.CRNT_TM_ORGCD = :inqCrntTmOrgcd
+-- [선택] 사용인번호
+-- AND    A.USRNO = :inqUsrno
+;
+2. Daily 필수터치 고객목록 조회 (페이징)
+
+-- selectDybEssnTouCtmList: Daily필수터치 고객목록 조회
+SELECT TO_CHAR(TRGT_INQDT, 'YYYYMMDD')           AS TRGT_INQDT       /* 타겟조회일자 */
+     , STFNO                                      AS STFNO            /* 직원번호 */
+     , STFNM                                      AS STFNM            /* 직원명 */
+     , USRNO                                      AS USRNO            /* 사용인번호 */
+     , BZ_FML_CTM_SEQNO                           AS BZ_FML_CTM_SEQNO /* 영업가족고객순번 */
+     , ESSN_TOU_TPCD                              AS ESSN_TOU_TPCD    /* 필수터치유형코드 */
+     , SCR_IDCNM                                  AS SCR_IDCNM        /* 화면표시명 */
+     , ESSN_TOU_TP_SEQNO                          AS ESSN_TOU_TP_SEQNO /* 필수터치유형순번 */
+     , ET_IT_1                                    AS ET_IT_1          /* 기타항목1 */
+     , CASE WHEN ESSN_TOU_TPCD = 'B0010' THEN CONCAT(LTRM_IS_CT, '건')
+            ELSE ET_IT_2
+       END                                        AS ET_IT_2          /* 기타항목2 */
+     , ET_IT_3                                    AS ET_IT_3          /* 기타항목3 */
+     , CARNO                                      AS CARNO            /* 차량번호 */
+     , (SELECT CTM_DSCNO
+        FROM   CUS_BZ_FML_CTM
+        WHERE  STFNO = T.STFNO
+        AND    BZ_FML_CTM_SEQNO = T.BZ_FML_CTM_SEQNO) AS CTM_DSCNO  /* 고객식별번호 */
+     , CTMNO                                      AS CTMNO            /* 고객번호 */
+     , HNGL_CTMNM                                 AS HNGL_CTMNM       /* 고객명 */
+     , SEXCD                                      AS SEXCD            /* 성별코드 */
+     , CASE WHEN SEXCD = 'M' THEN '남'
+            WHEN SEXCD = 'F' THEN '여'
+            ELSE '' END                           AS SEXNM            /* 성별명 */
+     , AGE                                        AS AGE              /* 나이 */
+     , CTM_BORN_YR                                AS CTM_BORN_YR      /* 고객출생년도 */
+     , CTM_BORN_MNDY                              AS CTM_BORN_MNDY    /* 고객출생월일 */
+     , CASE WHEN LENGTH(CTM_BORN_YR) = 4 AND LENGTH(CTM_BORN_MNDY) = 4
+            THEN NVL(TO_CHAR(TO_DATE(CONCAT(SUBSTR(CTM_BORN_YR, 3), CTM_BORN_MNDY)), 'YYYY-MM-DD'), '-')
+            ELSE '-'
+       END                                        AS CTM_BORN         /* 고객출생정보 */
+     , FML_BORN_YR                                AS FML_BORN_YR      /* 가족출생년도 */
+     , FML_BORN_MNDY                              AS FML_BORN_MNDY    /* 가족출생월일 */
+     , LTRM_IS_CT                                 AS LTRM_IS_CT       /* 장기가입건수 */
+     , CR_IS_CT                                   AS CR_IS_CT         /* 자동차가입건수 */
+     , HP_TLANO                                   AS HP_TLANO         /* 휴대전화지역번호 */
+     , HP_TLTNO                                   AS HP_TLTNO         /* 휴대전화국번 */
+     , HP_TLSNO                                   AS HP_TLSNO         /* 휴대전화일련번호 */
+     , HP_TLSNO                                   AS HP_NO            /* 마스킹_휴대전화번호 */
+     , NVL(TO_CHAR(IS_PL_AGRE_DT, 'YYYY-MM-DD'), '-') AS IS_PL_AGRE_DT  /* 가입설계동의일자 */
+     , NVL(TO_CHAR(CTM_TOU_DT,    'YYYY-MM-DD'), '-') AS CTM_TOU_DT     /* 고객터치일자 */
+     , NVL(TO_CHAR(GN_ANAL_DT,    'YYYY-MM-DD'), '-') AS GNANL_DT       /* 보장분석일자 */
+     , NVL(TO_CHAR(IS_PL_DT,      'YYYY-MM-DD'), '-') AS IS_PL_DT       /* 가입설계일자 */
+     , NVL(TO_CHAR(CR_CC_DT,      'YYYY-MM-DD'), '-') AS CR_CC_DT       /* 계약체결일자 */
+     -- DM발송여부
+     , NVL((SELECT CASE WHEN COUNT(1) > 0 THEN '1' ELSE '0' END
+            FROM SFA_CMPG_ACT Z
+            WHERE Z.STFNO = T.STFNO AND Z.USRNO = T.USRNO
+            AND   Z.CMPG_SEQNO < 1000
+            AND   Z.BZ_FML_CTM_SEQNO = T.BZ_FML_CTM_SEQNO
+            AND   Z.SFA_CMPG_SND_STCD <> '02'       /* 취소 제외 */
+            AND   Z.CMPG_ACT_TPCD = '01'             /* 01:DM발송 */
+           ), '0') AS DM_YN                           /* DM발송여부 */
+     -- MMS발송여부
+     , NVL((SELECT CASE WHEN COUNT(1) > 0 THEN '1' ELSE '0' END
+            FROM SFA_CMPG_ACT Z
+            WHERE Z.STFNO = T.STFNO AND Z.USRNO = T.USRNO
+            AND   Z.CMPG_SEQNO < 1000
+            AND   Z.BZ_FML_CTM_SEQNO = T.BZ_FML_CTM_SEQNO
+            AND   Z.SFA_CMPG_SND_STCD <> '02'       /* 취소 제외 */
+            AND   Z.CMPG_ACT_TPCD = '03'             /* 03:MMS발송 */
+           ), '0') AS MMS_YN                          /* MMS발송여부 */
+     -- DM최근발송정보
+     , NVL((SELECT MAX(TO_CHAR(Z.RQDT,'YYYYMMDDHH24MISS') ||'|'|| Z.SFA_CMPG_SND_STCD)
+            FROM SFA_CMPG_ACT Z
+            WHERE Z.STFNO = T.STFNO AND Z.USRNO = T.USRNO
+            AND   Z.CMPG_SEQNO < 1000
+            AND   Z.BZ_FML_CTM_SEQNO = T.BZ_FML_CTM_SEQNO
+            AND   Z.SFA_CMPG_SND_STCD <> '02'
+            AND   Z.CMPG_ACT_TPCD = '01'
+           ), '') AS DM_LATS_SND_INFO                 /* DM최근발송정보 */
+     -- MMS최근발송정보
+     , NVL((SELECT MAX(TO_CHAR(Z.RQDT,'YYYYMMDDHH24MISS') ||'|'|| Z.SFA_CMPG_SND_STCD)
+            FROM SFA_CMPG_ACT Z
+            WHERE Z.STFNO = T.STFNO AND Z.USRNO = T.USRNO
+            AND   Z.CMPG_SEQNO < 1000
+            AND   Z.BZ_FML_CTM_SEQNO = T.BZ_FML_CTM_SEQNO
+            AND   Z.SFA_CMPG_SND_STCD <> '02'
+            AND   Z.CMPG_ACT_TPCD = '03'
+           ), '') AS MMS_LATS_SND_INFO                /* MMS최근발송정보 */
+FROM   (
+       SELECT X.*
+            , ROWNUM AS RNUM
+       FROM   (
+              SELECT A.*
+                   , B.SCR_IDCNM                      /* 화면표시명 */
+                   , C.NM AS STFNM                    /* 직원명 */
+              FROM   SFA_DALY_ESSN_TOU_CTM A          /* Daily필수터치고객 */
+                   , SFA_DALY_ESSN_TOU_TP B           /* Daily필수터치유형 */
+                   , SAM_STF C                        /* 직원 */
+              WHERE  A.ESSN_TOU_TPCD = B.ESSN_TOU_TPCD(+)
+              AND    A.STFNO = C.STFNO
+              AND    C.STF_BZ_STCD = '01'
+              AND    C.STF_FLGCD IN ('02','03','04')
+              AND    C.ATCH_YN = '1'
+              -- [선택] 일별 조회
+              AND    TRGT_INQDT BETWEEN TO_DATE(:inqStYymd) AND TO_DATE(:inqStYymd || '235959', 'YYYYMMDDHH24MISS')
+              -- [선택] 월별 조회
+              -- AND    TRGT_INQDT BETWEEN TO_DATE(:inqStYymd) AND LAST_DAY(:inqStYymd) + 0.99999
+              -- AND    A.STFNO = :inqStfno             -- FP
+              -- AND    C.CRNT_ORGCD = :inqCrntOrgcd    -- 지점
+              -- AND    C.CRNT_TM_ORGCD = :inqCrntTmOrgcd -- 팀
+              -- AND    A.USRNO = :inqUsrno
+              -- === 정렬 조건 (택 1) ===
+              ORDER BY TRGT_INQDT DESC, HNGL_CTMNM ASC         -- 정렬1: 일자순
+              -- ORDER BY HNGL_CTMNM ASC, TRGT_INQDT DESC       -- 정렬2: 이름순
+              -- ORDER BY SCR_IDCNM ASC, TRGT_INQDT DESC, HNGL_CTMNM ASC  -- 정렬3: 유형순
+              -- ORDER BY GREATEST(NVL(IS_PL_AGRE_DT, TO_DATE('19000101'))  -- 정렬4: 최근활동순
+              --        , NVL(CTM_TOU_DT, TO_DATE('19000101'))
+              --        , NVL(GN_ANAL_DT, TO_DATE('19000101'))
+              --        , NVL(IS_PL_DT, TO_DATE('19000101'))
+              --        , NVL(CR_CC_DT, TO_DATE('19000101'))) DESC
+              --        , TRGT_INQDT DESC, HNGL_CTMNM ASC
+             ) X
+       ) T
+WHERE  RNUM BETWEEN (:pageNo - 1) * :pageSize + 1 AND :pageNo * :pageSize;
+3. 필수터치 알림톡 신청내역 조회
+
+-- selectDalyEssnTouNttlk: 필수터치타겟 알림톡 신청내역
+SELECT ESSN_TOU_TPCD                AS ESSN_TOU_TPCD   /* 필수터치유형코드 */
+     , RCV_CYC                      AS RCV_CYC         /* 수신주기 */
+     , TO_CHAR(RQDT, 'YYYY-MM-DD') AS RQDT             /* 신청일자 */
+FROM   SFA_DALY_ESSN_TOU_NTTLK     /* Daily필수터치알림톡 */
+WHERE  STFNO = :inqStfno
+ORDER BY RQDT DESC;
+4. 필수터치 알림톡 삭제
+
+-- deleteDalyEssnTouNttlk: 필수터치 알림톡 삭제
+DELETE
+FROM   SFA_DALY_ESSN_TOU_NTTLK    /* Daily필수터치알림톡 */
+WHERE  STFNO = :stfno;
+5. 필수터치 알림톡 등록
+
+-- insertDalyEssnTouNttlk: 필수터치 알림톡 등록
+INSERT INTO SFA_DALY_ESSN_TOU_NTTLK /* Daily필수터치알림톡 */
+(
+       STFNO           /* 직원번호 */
+     , ESSN_TOU_TPCD   /* 필수터치유형코드 */
+     , RCV_CYC         /* 수신주기 */
+     , RQDT            /* 신청일자 */
+     , INP_USR_ID      /* 입력사용자ID */
+     , INP_DTHMS       /* 입력일시 */
+     , MDF_USR_ID      /* 수정사용자ID */
+     , MDF_DTHMS       /* 수정일시 */
+) VALUES (
+       :stfno
+     , :essnTouTpcd
+     , :rcvCyc
+     , SYSDATE
+     , :stfno
+     , SYSDATE
+     , :stfno
+     , SYSDATE
+);
+6. 필수터치 고객 차량번호 복호화 조회
+
+-- selectDecCarno: 차량번호 복호화 정보 조회
+SELECT CARNO
+FROM   SFA_DALY_ESSN_TOU_CTM A
+WHERE  1=1
+AND    TRGT_INQDT        = TO_DATE(:trgtInqdt, 'YYYYMMDD')   -- 타겟조회일자
+AND    ESSN_TOU_TPCD     = :essnTouTpcd                       -- 필수터치유형코드
+AND    ESSN_TOU_TP_SEQNO = :essnTouTpSeqno                    -- 필수터치유형순번
+AND    BZ_FML_CTM_SEQNO  = :bzFmlCtmSeqno                     -- 영업가족고객순번
+AND    STFNO             = :slcStfno                           -- 직원번호
+-- AND    USRNO = :inqUsrno                                    -- 사용인번호
+;
+주요 테이블 및 바인드 변수 정리
+테이블
+테이블명	설명
+SFA_DALY_ESSN_TOU_CTM	Daily필수터치고객 (메인)
+SFA_DALY_ESSN_TOU_TP	Daily필수터치유형 (유형코드-화면표시명 매핑)
+SFA_DALY_ESSN_TOU_NTTLK	Daily필수터치알림톡 (알림톡 신청)
+SAM_STF	직원 마스터
+SFA_CMPG_ACT	캠페인활동 (DM/MMS 발송이력)
+CUS_BZ_FML_CTM	영업가족고객 (고객식별번호)
+바인드 변수
+변수명	설명	예시값
+:inqStYymd	조회일자	'20260223'
+:inqStYymdTp	조회구분	'D'(일별), 'M'(월별)
+:inqStfno	FP 사원번호	'0012345'
+:inqCrntOrgcd	지점코드	'1234'
+:inqCrntTmOrgcd	팀코드	'5678'
+:inqUsrno	사용인번호	'0012345'
+:inqOrdrFlgcd	정렬구분	'1'(일자순), '2'(이름순), '3'(유형순), '4'(최근활동순)
+:pageNo / :pageSize	페이지	1 / 20
+:stfno	직원번호 (등록/삭제용)	'0012345'
+:essnTouTpcd	필수터치유형코드	'B0010'
+:rcvCyc	수신주기	'D'

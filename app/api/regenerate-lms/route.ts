@@ -4,15 +4,15 @@ import type { Customer, LMSMessage } from "@/lib/types";
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-5.2-chat-latest";
 
-const FP_NAME = "김한화";
-const FP_PHONE = "010-1111-1111";
 const CS_PHONE = "1566-8000";
 
 function buildRegeneratePrompt(
   customer: Customer,
   messageType: string,
-  existingContent: string
+  existingContent: string,
+  fpName: string
 ): string {
+  const FP_NAME = fpName || "담당 FP";
   const productList = customer.products
     .map(
       (p) =>
@@ -29,7 +29,7 @@ function buildRegeneratePrompt(
 규칙:
 - 이전 메시지와 확연히 다른 표현, 구성, 어조로 작성
 - 고객 연령대/성별에 맞는 신뢰감 있고 따뜻한 어조
-- 담당 FP ${FP_NAME}(${FP_PHONE}) 및 고객센터 ${CS_PHONE} 포함
+- 담당 FP ${FP_NAME} 및 고객센터 ${CS_PHONE} 포함
 - LMS 발송용으로 핵심 내용을 상단에 배치, 줄바꿈 적절히 사용
 - 이모지 1~2개 이하로 자제
 
@@ -103,6 +103,7 @@ export async function POST(req: NextRequest) {
     const customer: Customer = body.customer;
     const messageType: string = body.messageType;
     const existingContent: string = body.existingContent ?? "";
+    const fpName: string = body.fpName ?? "담당 FP";
 
     if (!customer?.id || !messageType) {
       return NextResponse.json(
@@ -111,7 +112,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const prompt = buildRegeneratePrompt(customer, messageType, existingContent);
+    const prompt = buildRegeneratePrompt(customer, messageType, existingContent, fpName);
     let raw = "";
 
     try {

@@ -8,11 +8,10 @@ function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-const FP_NAME = "김한화";
-const FP_PHONE = "010-1111-1111";
 const CS_PHONE = "1566-8000";
 
-function buildPrompt(customer: Customer): string {
+function buildPrompt(customer: Customer, fpName: string): string {
+  const FP_NAME = fpName || "담당 FP";
   const productList = customer.products
     .map(
       (p) =>
@@ -27,7 +26,7 @@ function buildPrompt(customer: Customer): string {
 
 규칙:
 - 고객 연령대/성별에 맞는 신뢰감 있고 따뜻한 어조
-- 담당 FP ${FP_NAME}(${FP_PHONE}) 및 고객센터 ${CS_PHONE} 포함
+- 담당 FP ${FP_NAME} 및 고객센터 ${CS_PHONE} 포함
 - LMS 발송용으로 핵심 내용을 상단에 배치, 줄바꿈 적절히 사용
 - 이모지 1~2개 이하로 자제
 
@@ -92,12 +91,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const customer: Customer = body.customer;
+    const fpName: string = body.fpName ?? "담당 FP";
 
     if (!customer?.id) {
       return NextResponse.json({ error: "Invalid customer data" }, { status: 400 });
     }
 
-    const prompt = buildPrompt(customer);
+    const prompt = buildPrompt(customer, fpName);
     let raw = "";
 
     // gpt-5, gpt-4.1 계열은 Responses API 시도 → 실패 시 Chat API 폴백

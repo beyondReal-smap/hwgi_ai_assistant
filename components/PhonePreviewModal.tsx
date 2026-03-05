@@ -23,6 +23,7 @@ interface PhonePreviewModalProps {
   isOpen: boolean;
   message: LMSMessage | null;
   customer: Customer | null;
+  fpName?: string;
   onClose: () => void;
   onSend: (message: LMSMessage) => void;
   onEdit: () => void;
@@ -33,6 +34,7 @@ export default function PhonePreviewModal({
   isOpen,
   message,
   customer,
+  fpName,
   onClose,
   onSend,
   onEdit,
@@ -72,6 +74,7 @@ export default function PhonePreviewModal({
           customer,
           messageType: currentMessage.type,
           existingContent: currentMessage.content,
+          fpName,
         }),
       });
 
@@ -270,37 +273,14 @@ function PhoneFrame({
   customerPhone: string;
 }) {
   return (
-    <div className="relative w-[14.5rem] sm:w-64 min-h-[420px] sm:min-h-[480px] bg-black rounded-[40px] shadow-2xl overflow-hidden pt-[12px] px-[8px] pb-[12px]">
-      {/* Phone notch */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 w-24 h-5 bg-black rounded-full z-10 flex items-center justify-center">
-        <div className="w-2.5 h-2.5 rounded-full bg-gray-800 border border-gray-700" />
-      </div>
-
+    <div className="relative w-[14.5rem] sm:w-64 bg-black rounded-[40px] shadow-2xl overflow-hidden p-[8px]">
       {/* Screen */}
       <div className="h-full bg-[#F2F2F7] rounded-[34px] overflow-hidden flex flex-col">
-        {/* Status bar */}
-        <div className="px-6 pt-8 pb-2 flex items-center justify-between text-xs text-gray-800 font-semibold bg-white/80">
-          <span>{timeStr}</span>
-          <div className="flex items-center gap-1">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M1 6l6-4 6 4M13 6l6-4 5 4" stroke="currentColor" strokeWidth="2" fill="none"/>
-              <rect x="17" y="11" width="4" height="8" rx="0.5"/>
-              <rect x="11" y="8" width="4" height="11" rx="0.5"/>
-              <rect x="5" y="5" width="4" height="14" rx="0.5"/>
-            </svg>
-            <svg width="14" height="10" viewBox="0 0 24 12" fill="currentColor">
-              <rect x="0" y="2" width="20" height="9" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-              <rect x="2" y="4" width="14" height="5" rx="1"/>
-              <rect x="21" y="4" width="2" height="4" rx="1"/>
-            </svg>
-          </div>
-        </div>
-
         {/* Messages app header */}
-        <div className="px-4 pt-2 pb-3 bg-white/90 border-b border-gray-200/50">
+        <div className="px-4 py-2 bg-white/90 border-b border-gray-200/50">
           <div className="flex items-center gap-2">
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+              className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
               style={{ background: "linear-gradient(135deg, #1A2B4A, #2D4168)" }}
             >
               {customerName[0]}

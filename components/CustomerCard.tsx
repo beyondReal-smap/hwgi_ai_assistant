@@ -4,16 +4,37 @@ import { motion } from "framer-motion";
 import type { Customer } from "@/lib/types";
 
 const eventColors: Record<string, { bg: string; text: string; border: string }> = {
-  "본인 생일": { bg: "#F3E8FF", text: "#7C3AED", border: "#DDD6FE" },
-  "자동차 만기 도래": { bg: "#FEF2F2", text: "#DC2626", border: "#FECACA" },
-  "장기 갱신": { bg: "#FFF7ED", text: "#EA580C", border: "#FED7AA" },
-  "장기 만기 도래": { bg: "#FEF2F2", text: "#DC2626", border: "#FECACA" },
-  "장기 체결 감사": { bg: "#F0FDF4", text: "#16A34A", border: "#BBF7D0" },
-  "장기 자동이체 미인출": { bg: "#FFFBEB", text: "#D97706", border: "#FDE68A" },
+  // A 계열: 계약 관련
   "장기 연체(미납)": { bg: "#FEF2F2", text: "#DC2626", border: "#FECACA" },
-  "주요담보 저가입고객 안내": { bg: "#EFF6FF", text: "#2563EB", border: "#BFDBFE" },
-  "미터치고객": { bg: "#F8FAFC", text: "#64748B", border: "#E2E8F0" },
+  "장기 실효(해지)": { bg: "#FEF2F2", text: "#DC2626", border: "#FECACA" },
+  "장기 해약": { bg: "#FEF2F2", text: "#DC2626", border: "#FECACA" },
+  "장기계약 부활": { bg: "#F0FDF4", text: "#16A34A", border: "#BBF7D0" },
+  "보험금 지급": { bg: "#EFF6FF", text: "#2563EB", border: "#BFDBFE" },
+  "장기 갱신": { bg: "#FFF7ED", text: "#EA580C", border: "#FED7AA" },
+  "장기 납입만기(완납)": { bg: "#F0FDF4", text: "#16A34A", border: "#BBF7D0" },
+  "장기 만기 도래": { bg: "#FEF2F2", text: "#DC2626", border: "#FECACA" },
+  "자동차 만기 도래": { bg: "#FEF2F2", text: "#DC2626", border: "#FECACA" },
+  "장기 체결 감사": { bg: "#F0FDF4", text: "#16A34A", border: "#BBF7D0" },
+  "고객정보 수정": { bg: "#F8FAFC", text: "#64748B", border: "#E2E8F0" },
+  "우편물 반송": { bg: "#FFFBEB", text: "#D97706", border: "#FDE68A" },
+  "장기 자동이체 미인출": { bg: "#FFFBEB", text: "#D97706", border: "#FDE68A" },
+  "미래보장담보 개시 도래": { bg: "#FFF7ED", text: "#EA580C", border: "#FED7AA" },
+  // B 계열: 고객 이벤트/안내
+  "본인 생일": { bg: "#F3E8FF", text: "#7C3AED", border: "#DDD6FE" },
+  "자녀 입학": { bg: "#F3E8FF", text: "#7C3AED", border: "#DDD6FE" },
+  "휴면보험금 안내": { bg: "#EFF6FF", text: "#2563EB", border: "#BFDBFE" },
+  "자보 이탈고객 만기 안내": { bg: "#FFF7ED", text: "#EA580C", border: "#FED7AA" },
+  "타사 자보만기(장기고객)": { bg: "#FFF7ED", text: "#EA580C", border: "#FED7AA" },
+  "상령월 도래": { bg: "#EFF6FF", text: "#2563EB", border: "#BFDBFE" },
   "가입설계동의 만료": { bg: "#FFF7ED", text: "#EA580C", border: "#FED7AA" },
+  "가망고객정보 삭제": { bg: "#F8FAFC", text: "#64748B", border: "#E2E8F0" },
+  "장기 미터치 이관고객 안내": { bg: "#F8FAFC", text: "#64748B", border: "#E2E8F0" },
+  "주요담보 저가입고객 안내": { bg: "#EFF6FF", text: "#2563EB", border: "#BFDBFE" },
+  // C 계열: 영업 활동
+  "미터치고객": { bg: "#F8FAFC", text: "#64748B", border: "#E2E8F0" },
+  "담보 부족고객": { bg: "#EFF6FF", text: "#2563EB", border: "#BFDBFE" },
+  "상품추가 가입고객": { bg: "#F0FDF4", text: "#16A34A", border: "#BBF7D0" },
+  "미가입 가망고객": { bg: "#FFFBEB", text: "#D97706", border: "#FDE68A" },
 };
 
 const urgencyConfig: Record<string, { label: string; bg: string; text: string; pulse: boolean }> = {
@@ -180,6 +201,7 @@ function EventIcon({ eventType, color }: { eventType: string; color: string }) {
 
   switch (eventType) {
     case "본인 생일":
+    case "자녀 입학":
       return (
         <svg {...iconProps}>
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
@@ -187,6 +209,8 @@ function EventIcon({ eventType, color }: { eventType: string; color: string }) {
         </svg>
       );
     case "자동차 만기 도래":
+    case "자보 이탈고객 만기 안내":
+    case "타사 자보만기(장기고객)":
       return (
         <svg {...iconProps}>
           <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
@@ -195,6 +219,8 @@ function EventIcon({ eventType, color }: { eventType: string; color: string }) {
       );
     case "장기 갱신":
     case "장기 만기 도래":
+    case "미래보장담보 개시 도래":
+    case "상령월 도래":
       return (
         <svg {...iconProps}>
           <polyline points="23 4 23 10 17 10"/>
@@ -202,12 +228,16 @@ function EventIcon({ eventType, color }: { eventType: string; color: string }) {
         </svg>
       );
     case "장기 체결 감사":
+    case "장기계약 부활":
+    case "장기 납입만기(완납)":
       return (
         <svg {...iconProps}>
           <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
         </svg>
       );
     case "장기 자동이체 미인출":
+    case "가입설계동의 만료":
+    case "우편물 반송":
       return (
         <svg {...iconProps}>
           <circle cx="12" cy="12" r="10"/>
@@ -216,11 +246,36 @@ function EventIcon({ eventType, color }: { eventType: string; color: string }) {
         </svg>
       );
     case "장기 연체(미납)":
+    case "장기 실효(해지)":
+    case "장기 해약":
       return (
         <svg {...iconProps}>
           <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
           <line x1="12" y1="9" x2="12" y2="13"/>
           <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      );
+    case "보험금 지급":
+    case "휴면보험금 안내":
+      return (
+        <svg {...iconProps}>
+          <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+        </svg>
+      );
+    case "주요담보 저가입고객 안내":
+    case "담보 부족고객":
+    case "상품추가 가입고객":
+    case "미가입 가망고객":
+      return (
+        <svg {...iconProps}>
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      );
+    case "미터치고객":
+    case "장기 미터치 이관고객 안내":
+      return (
+        <svg {...iconProps}>
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72"/>
         </svg>
       );
     default:

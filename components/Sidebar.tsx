@@ -37,13 +37,14 @@ const urgencyDot: Record<string, string> = {
 
 interface SidebarProps {
   fpProfile: FPProfile;
+  touchCount?: number;
 }
 
-export default function Sidebar({ fpProfile }: SidebarProps) {
+export default function Sidebar({ fpProfile, touchCount = 0 }: SidebarProps) {
   const [todos, setTodos] = useState<TodoItem[]>(TODAY_TODOS);
-  const totalCustomers = useCountUp(147, 1400, 500);
-  const todayTargets = useCountUp(95, 800, 700);
-  const completed = useCountUp(3, 600, 900);
+  const totalCustomers = useCountUp(touchCount, 1400, 500);
+  const todayTargets = useCountUp(touchCount, 800, 700);
+  const completed = useCountUp(0, 600, 900);
   const monthly = useCountUp(92, 1000, 800);
 
   const completedCount = todos.filter((t) => t.done).length;

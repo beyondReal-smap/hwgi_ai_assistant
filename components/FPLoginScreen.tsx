@@ -41,7 +41,7 @@ export default function FPLoginScreen({
 
         <h1 className="text-2xl font-bold text-hanwha-navy mb-1">AI 영업비서</h1>
         <p className="text-sm text-slate-600 mb-6">
-          FP.csv에 등록된 설계사만 로그인할 수 있습니다.
+          사번과 4자리 비밀번호를 입력해주세요.
         </p>
 
         <form
@@ -58,7 +58,7 @@ export default function FPLoginScreen({
               type="text"
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
-              placeholder="예: 3219739"
+              placeholder="예: 3305582"
               disabled={disabled}
               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:border-hanwha-orange focus:ring-2 focus:ring-orange-100 disabled:opacity-60"
               autoComplete="username"
@@ -66,14 +66,20 @@ export default function FPLoginScreen({
           </label>
 
           <label className="block">
-            <span className="text-xs font-semibold text-slate-500">비밀번호</span>
+            <span className="text-xs font-semibold text-slate-500">비밀번호 (4자리)</span>
             <input
               type="password"
+              inputMode="numeric"
+              maxLength={4}
+              pattern="[0-9]{4}"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="FP.csv 비밀번호"
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9]/g, "").slice(0, 4);
+                setPassword(val);
+              }}
+              placeholder="4자리 비밀번호"
               disabled={disabled}
-              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:border-hanwha-orange focus:ring-2 focus:ring-orange-100 disabled:opacity-60"
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:border-hanwha-orange focus:ring-2 focus:ring-orange-100 disabled:opacity-60 tracking-[0.3em]"
               autoComplete="current-password"
             />
           </label>
@@ -113,10 +119,7 @@ export default function FPLoginScreen({
         </div>
 
         <div className="mt-5 pt-4 border-t border-slate-200 text-[11px] text-slate-500 leading-relaxed">
-          필수 컬럼: <code>name</code>, <code>employeeId</code>, <code>password</code>
-          <br />
-          선택 컬럼: <code>branch</code>, <code>level</code>, <code>yearsOfExperience</code>,{" "}
-          <code>phone</code>, <code>email</code>, <code>profileInitials</code>
+          신주안지점 소속 FP만 로그인할 수 있습니다.
         </div>
       </div>
     </div>

@@ -7,12 +7,11 @@ import LogoutScreen from "@/components/LogoutScreen";
 import Sidebar from "@/components/Sidebar";
 import ChatWindow from "@/components/ChatWindow";
 import FPLoginScreen from "@/components/FPLoginScreen";
-import { parseFPAccountsCsv, authenticateFP } from "@/lib/fp-auth";
+import { authenticateFP } from "@/lib/fp-auth";
 import { track, setUser } from "@/lib/analytics";
 import type { FPAccount, FPProfile } from "@/lib/types";
 
 const FP_SESSION_KEY = "fp_logged_in_employee_id";
-const FP_CSV_CANDIDATES = ["/FP.csv", "/fp.csv"];
 
 export default function Home() {
   const [accounts, setAccounts] = useState<FPAccount[]>([]);
@@ -27,50 +26,39 @@ export default function Home() {
   const [logoutScreenLeaving, setLogoutScreenLeaving] = useState(false);
   // Store FP name separately so logout screen can still show it after currentFP clears
   const [logoutFPName, setLogoutFPName] = useState("");
+  const [touchCount, setTouchCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadFpCsv = async () => {
+    const loadAccounts = async () => {
       setIsLoadingAccounts(true);
       setLoadError(null);
 
-      let csvText: string | null = null;
-      let lastStatusCode: number | null = null;
+      try {
+        const res = await fetch("/api/fp-accounts");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
 
-      for (const path of FP_CSV_CANDIDATES) {
-        try {
-          const response = await fetch(path, { cache: "no-store" });
-          if (response.ok) {
-            csvText = await response.text();
-            break;
-          }
-          lastStatusCode = response.status;
-        } catch {
-          // Ignore network error and continue to next candidate path.
+        if (data.error) {
+          setLoadError(data.error);
+          setAccounts([]);
+        } else {
+          setAccounts(data.accounts ?? []);
         }
-      }
-
-      if (cancelled) return;
-
-      if (!csvText) {
+      } catch (err) {
+        if (cancelled) return;
         setAccounts([]);
         setLoadError(
-          `FP.csv 파일을 찾지 못했습니다. (/public/FP.csv, 마지막 응답 코드: ${
-            lastStatusCode ?? "unknown"
-          })`
+          `FP 계정 데이터를 불러오지 못했습니다: ${err instanceof Error ? err.message : "알 수 없는 오류"}`
         );
-        setIsLoadingAccounts(false);
-        return;
+      } finally {
+        if (!cancelled) setIsLoadingAccounts(false);
       }
-
-      const parsed = parseFPAccountsCsv(csvText);
-      setAccounts(parsed.accounts);
-      setLoadError(parsed.parseError ?? null);
-      setIsLoadingAccounts(false);
     };
 
-    loadFpCsv();
+    loadAccounts();
 
     return () => {
       cancelled = true;
@@ -111,7 +99,18 @@ export default function Home() {
     if (!currentFP) {
       setShowLoginLoading(false);
       setLoginLoadingDone(false);
+      setTouchCount(0);
+      return;
     }
+    // Fetch daily touch count for sidebar stats
+    fetch("/api/daily-touch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stfno: currentFP.employeeId }),
+    })
+      .then((res) => res.json())
+      .then((data) => setTouchCount(data.totalCount ?? 0))
+      .catch(() => setTouchCount(0));
   }, [currentFP]);
 
   const handleLogin = (employeeId: string, password: string) => {
@@ -190,11 +189,11 @@ export default function Home() {
             />
           )}
 
-          <div className="flex flex-col h-[100dvh]">
+          <div className="flex flex-col h-screen">
             <AppHeader currentFP={currentFP} onLogout={handleLogout} />
 
             <div className="flex flex-1 min-h-0 overflow-hidden">
-              <Sidebar fpProfile={currentFP} />
+              <Sidebar fpProfile={currentFP} touchCount={touchCount} />
               <ChatWindow fpProfile={currentFP} />
             </div>
           </div>
