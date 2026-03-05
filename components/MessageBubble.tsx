@@ -222,6 +222,38 @@ export default function MessageBubble({
           </div>
         )}
 
+        {/* Analysis card */}
+        {message.type === "analysis" && (
+          <div className="px-3.5 sm:px-4 py-3 rounded-2xl rounded-bl-sm shadow-sm border border-blue-100 bg-gradient-to-br from-blue-50/80 to-slate-50/80 max-w-full">
+            {message.content.split("\n").map((line, i) => {
+              const trimmed = line.trim();
+              if (!trimmed) return <div key={i} className="h-1.5" />;
+              // Section headers (📊, 💡)
+              if (/^[📊💡🔍📌]/.test(trimmed)) {
+                return (
+                  <p key={i} className="text-[13px] sm:text-sm font-bold text-hanwha-navy mt-1 first:mt-0">
+                    {trimmed}
+                  </p>
+                );
+              }
+              // Bullet items
+              if (trimmed.startsWith("•") || trimmed.startsWith("-")) {
+                return (
+                  <p key={i} className="text-[12px] sm:text-[13px] text-gray-700 leading-relaxed pl-1 mt-0.5">
+                    {trimmed}
+                  </p>
+                );
+              }
+              // Regular text
+              return (
+                <p key={i} className="text-[12px] sm:text-[13px] text-gray-600 leading-relaxed mt-0.5">
+                  {trimmed}
+                </p>
+              );
+            })}
+          </div>
+        )}
+
         {/* Customer list */}
         {message.type === "customer-list" && message.customers && (
           <div className="flex flex-col gap-2 w-full">

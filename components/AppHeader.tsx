@@ -5,9 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { FPProfile } from "@/lib/types";
 
-const NAV_ITEMS: { label: string; href: string; comingSoon?: boolean }[] = [
+const NAV_ITEMS: { label: string; href: string; comingSoon?: boolean; bookmark?: boolean }[] = [
   { label: "AI 영업비서", href: "/" },
-  { label: "사용법", href: "/guide" },
+  { label: "사용법", href: "/guide", bookmark: true },
   { label: "직업분류", href: "/jobcode", comingSoon: true },
 ];
 const KST_TIMEZONE = "Asia/Seoul";
@@ -128,14 +128,22 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
     return () => clearInterval(timer);
   }, []);
 
-  // For pages (like /jobcode) that don't pass currentFP,
-  // detect login state from localStorage so logout button is consistent.
+  // For pages (like /guide) that don't pass currentFP,
+  // read full profile from localStorage so avatar button is consistent.
+  const [storedFP, setStoredFP] = useState<FPProfile | null>(null);
   useEffect(() => {
     if (!currentFP) {
       const savedId = window.localStorage.getItem(FP_SESSION_KEY);
       setInternalLoggedIn(!!savedId);
+      try {
+        const json = window.localStorage.getItem("fp_profile");
+        setStoredFP(json ? JSON.parse(json) : null);
+      } catch {
+        setStoredFP(null);
+      }
     } else {
       setInternalLoggedIn(false);
+      setStoredFP(null);
     }
   }, [currentFP]);
 
@@ -206,7 +214,22 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
               )}
             </div>
           )}
-          {!currentFP && internalLoggedIn && (
+          {!currentFP && internalLoggedIn && storedFP && (
+            <div className="relative shrink-0" ref={profileRefMobile}>
+              <button
+                onClick={() => setShowProfile((v) => !v)}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold transition-all"
+                style={avatarButtonStyle}
+                aria-label="내 프로필"
+              >
+                {storedFP.profileInitials}
+              </button>
+              {showProfile && (
+                <ProfileDropdown fp={storedFP} onLogout={handleLogout} onClose={() => setShowProfile(false)} />
+              )}
+            </div>
+          )}
+          {!currentFP && internalLoggedIn && !storedFP && (
             <button
               onClick={handleLogout}
               className="h-7 px-2.5 text-[10px] font-medium rounded-md border border-white/20 text-white/60 hover:bg-white/10 active:bg-white/20 transition-colors whitespace-nowrap shrink-0"
@@ -218,7 +241,7 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
 
         {/* Row 2 — nav tabs, fixed height 36px */}
         <div className="flex items-end h-9 px-3 gap-0.5">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((i) => !i.bookmark).map((item) => {
             const isActive = pathname === item.href;
             if (item.comingSoon) {
               return (
@@ -247,6 +270,24 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
               </Link>
             );
           })}
+          <div className="flex-1" />
+          {NAV_ITEMS.filter((i) => i.bookmark).map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`shrink-0 h-8 px-3 flex items-center gap-1 rounded-t-md text-xs font-semibold transition-colors border-x border-t ${
+                  isActive
+                    ? "bg-amber-400 text-hanwha-navy border-amber-300"
+                    : "bg-amber-400/20 text-amber-300 border-amber-400/30 hover:bg-amber-400/30"
+                }`}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20l-6.5-4L7 22V4.5A2.5 2.5 0 0 1 9.5 2z"/></svg>
+                {item.label}
+              </Link>
+            );
+          })}
         </div>
       </div>
 
@@ -260,7 +301,7 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
           />
           <div className="w-px h-5 bg-white/20 mx-1 shrink-0" />
           <nav className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
-            {NAV_ITEMS.map((item) => {
+            {NAV_ITEMS.filter((i) => !i.bookmark).map((item) => {
               const isActive = pathname === item.href;
               if (item.comingSoon) {
                 return (
@@ -293,6 +334,23 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
+          {NAV_ITEMS.filter((i) => i.bookmark).map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
+                  isActive
+                    ? "bg-amber-400 text-hanwha-navy"
+                    : "bg-amber-400/20 text-amber-300 hover:bg-amber-400/30"
+                }`}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20l-6.5-4L7 22V4.5A2.5 2.5 0 0 1 9.5 2z"/></svg>
+                {item.label}
+              </Link>
+            );
+          })}
           <div className="hidden md:flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1.5">
             <svg
               width="13"
@@ -328,7 +386,22 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
               )}
             </div>
           )}
-          {!currentFP && internalLoggedIn && (
+          {!currentFP && internalLoggedIn && storedFP && (
+            <div className="relative shrink-0" ref={profileRefDesktop}>
+              <button
+                onClick={() => setShowProfile((v) => !v)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold transition-all"
+                style={avatarButtonStyle}
+                aria-label="내 프로필"
+              >
+                {storedFP.profileInitials}
+              </button>
+              {showProfile && (
+                <ProfileDropdown fp={storedFP} onLogout={handleLogout} onClose={() => setShowProfile(false)} />
+              )}
+            </div>
+          )}
+          {!currentFP && internalLoggedIn && !storedFP && (
             <button
               onClick={handleLogout}
               className="px-2.5 py-1.5 text-xs font-medium rounded-md border border-white/20 text-white/60 hover:bg-white/10 transition-colors whitespace-nowrap"

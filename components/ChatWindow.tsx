@@ -483,7 +483,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
               const { analysis } = (await analysisRes.json()) as { analysis: string };
               setIsTyping(false);
               if (analysis) {
-                addBotMessage({ role: "bot", type: "text", content: `💡 ${analysis}` });
+                addBotMessage({ role: "bot", type: "analysis", content: analysis });
               }
             } catch {
               setIsTyping(false);

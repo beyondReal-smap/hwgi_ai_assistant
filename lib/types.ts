@@ -95,7 +95,7 @@ export interface LMSMessage {
   content: string;
 }
 
-export type MessageType = "text" | "customer-list" | "lms-list";
+export type MessageType = "text" | "customer-list" | "lms-list" | "analysis";
 
 export interface ChatMessage {
   id: string;

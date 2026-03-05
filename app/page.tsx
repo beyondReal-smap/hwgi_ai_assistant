@@ -91,6 +91,7 @@ export default function Home() {
 
     const { password: _, ...savedProfile } = savedAccount;
     setCurrentFP(savedProfile);
+    window.localStorage.setItem("fp_profile", JSON.stringify(savedProfile));
     setSessionChecked(true);
   }, [accounts, isLoadingAccounts, currentFP]);
 
@@ -134,6 +135,7 @@ export default function Home() {
     track("login", { employeeId: profile.employeeId, name: profile.name, branch: profile.branch });
     setCurrentFP(profile);
     window.localStorage.setItem(FP_SESSION_KEY, profile.employeeId);
+    window.localStorage.setItem("fp_profile", JSON.stringify(profile));
   };
 
   const handleLogout = () => {
@@ -143,6 +145,7 @@ export default function Home() {
     setAuthError(null);
     setLogoutFPName(currentFP.name);
     window.localStorage.removeItem(FP_SESSION_KEY);
+    window.localStorage.removeItem("fp_profile");
 
     // Show logout screen immediately while main content is still visible
     setShowLogoutScreen(true);
@@ -159,9 +162,14 @@ export default function Home() {
     setTimeout(() => setShowLogoutScreen(false), 1650);
   };
 
-  // Session check in progress — show blank to prevent login screen flash during navigation.
+  // Session check in progress — show header shell to prevent flash during navigation.
   if (!currentFP && !sessionChecked) {
-    return <div className="fixed inset-0 bg-[#F0F4F8]" />;
+    return (
+      <div className="flex flex-col h-screen">
+        <AppHeader />
+        <div className="flex-1 bg-[#F0F4F8]" />
+      </div>
+    );
   }
 
   return (

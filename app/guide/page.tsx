@@ -160,16 +160,16 @@ function ExampleRow({ example }: { example: Example }) {
   return (
     <button
       onClick={handleCopy}
-      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-gray-50 active:bg-orange-50 transition-colors group"
+      className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-left hover:bg-gray-50 active:bg-orange-50 transition-colors group"
     >
       <span className="flex-1 min-w-0">
-        <span className="text-sm font-medium text-hanwha-navy block truncate">
+        <span className="text-xs font-medium text-hanwha-navy block truncate">
           {example.query}
         </span>
-        <span className="text-xs text-gray-400 block mt-0.5">{example.desc}</span>
+        <span className="text-[10px] text-gray-400 block mt-0.5">{example.desc}</span>
       </span>
       <span
-        className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors ${
+        className={`shrink-0 text-[9px] font-medium px-1.5 py-0.5 rounded transition-colors ${
           copied
             ? "bg-emerald-100 text-emerald-600"
             : "bg-gray-100 text-gray-400 group-hover:bg-hanwha-orange/10 group-hover:text-hanwha-orange"
@@ -185,15 +185,15 @@ function CategoryCard({ category }: { category: Category }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50/50 transition-colors"
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-gray-50/50 transition-colors"
       >
-        <span className="text-xl shrink-0">{category.icon}</span>
+        <span className="text-base shrink-0">{category.icon}</span>
         <span className="flex-1 min-w-0">
-          <span className="text-sm font-bold text-hanwha-navy">{category.title}</span>
-          <span className="text-xs text-gray-400 ml-2">{category.examples.length}개 예시</span>
+          <span className="text-xs font-bold text-hanwha-navy">{category.title}</span>
+          <span className="text-[10px] text-gray-400 ml-1.5">{category.examples.length}개</span>
         </span>
         <svg
           width="16"
@@ -222,17 +222,17 @@ function CategoryCard({ category }: { category: Category }) {
 
 function ScenarioCard({ scenario, index }: { scenario: Scenario; index: number }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="w-6 h-6 rounded-full bg-hanwha-orange/10 text-hanwha-orange text-xs font-bold flex items-center justify-center">
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="w-5 h-5 rounded-full bg-hanwha-orange/10 text-hanwha-orange text-[10px] font-bold flex items-center justify-center">
           {String.fromCharCode(65 + index)}
         </span>
-        <span className="text-sm font-bold text-hanwha-navy">{scenario.title}</span>
+        <span className="text-xs font-bold text-hanwha-navy">{scenario.title}</span>
       </div>
-      <ol className="space-y-2">
+      <ol className="space-y-1.5">
         {scenario.steps.map((step, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-            <span className="shrink-0 w-5 h-5 rounded-full bg-gray-100 text-gray-400 text-[10px] font-bold flex items-center justify-center mt-0.5">
+          <li key={i} className="flex items-start gap-1.5 text-[11px] text-gray-600">
+            <span className="shrink-0 w-4 h-4 rounded-full bg-gray-100 text-gray-400 text-[9px] font-bold flex items-center justify-center mt-0.5">
               {i + 1}
             </span>
             <span className="min-w-0">{step}</span>
@@ -253,25 +253,25 @@ export default function GuidePage() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8">
           {/* Title */}
-          <div className="mb-6">
-            <h1 className="text-xl sm:text-2xl font-bold text-hanwha-navy">사용법 안내</h1>
-            <p className="text-sm text-gray-400 mt-1">
+          <div className="mb-4">
+            <h1 className="text-base sm:text-lg font-bold text-hanwha-navy">사용법 안내</h1>
+            <p className="text-[11px] text-gray-400 mt-0.5">
               채팅창에 아래 예시를 입력하면 해당 정보를 조회할 수 있습니다.
               예시를 탭하면 클립보드에 복사됩니다.
             </p>
           </div>
 
           {/* Categories */}
-          <div className="space-y-3 mb-8">
+          <div className="space-y-2 mb-6">
             {CATEGORIES.map((cat, i) => (
               <CategoryCard key={i} category={cat} />
             ))}
           </div>
 
           {/* Scenarios */}
-          <div className="mb-8">
-            <h2 className="text-lg font-bold text-hanwha-navy mb-4">데모 시나리오</h2>
-            <div className="space-y-3">
+          <div className="mb-6">
+            <h2 className="text-sm font-bold text-hanwha-navy mb-2.5">데모 시나리오</h2>
+            <div className="space-y-2">
               {SCENARIOS.map((sc, i) => (
                 <ScenarioCard key={i} scenario={sc} index={i} />
               ))}
