@@ -22,7 +22,12 @@ TOKEN_CACHE_PATH = BM25_DIR / "tokenized_docs.json"
 EMBEDDINGS_PATH = EMBED_DIR / "embeddings.npy"
 FAISS_INDEX_PATH = EMBED_DIR / "faiss.index"
 EMBED_META_PATH = EMBED_DIR / "meta.json"
-
+SILSON_RAG_DIR = PROJECT_ROOT.parent / "silson_rag"
+SILSON_CLAUSES_CSV = SILSON_RAG_DIR / "실손의료비_search_ready_clauses.csv"
+SILSON_MANIFEST_CSV = SILSON_RAG_DIR / "openai_upload_manifest.csv"
+SILSON_DOCS_DIR = SILSON_RAG_DIR / "search_docs_md"
+SILSON_CLAUSE_MANIFEST_CSV = SILSON_RAG_DIR / "openai_upload_clause_manifest.csv"
+SILSON_CLAUSE_DOCS_DIR = SILSON_RAG_DIR / "search_clause_docs_md"
 
 for _p in (DATA_DIR, BM25_DIR, EMBED_DIR):
     _p.mkdir(parents=True, exist_ok=True)
@@ -62,6 +67,13 @@ class Settings:
     cross_encoder_model_name: str = os.getenv(
         "CROSS_ENCODER_MODEL_NAME", "cross-encoder/ms-marco-MiniLM-L-6-v2"
     )
+    silson_vector_store_id: str = os.getenv("SILSON_VECTOR_STORE_ID", "")
+    silson_openai_model: str = os.getenv("SILSON_OPENAI_MODEL", "gpt-4.1-mini")
+    silson_use_embedding: bool = _env_bool("SILSON_USE_EMBEDDING", True)
+    silson_alpha_keyword: float = _env_float("SILSON_ALPHA_KEYWORD", 0.6)
+    silson_use_query_rewriting: bool = _env_bool("SILSON_USE_QUERY_REWRITING", True)
+    rerank_weight_score: float = _env_float("RERANK_WEIGHT_SCORE", 0.75)
+    rerank_weight_overlap: float = _env_float("RERANK_WEIGHT_OVERLAP", 0.25)
     alpha_bm25: float = _env_float("ALPHA_BM25", 0.3)
     min_score_to_show: float = _env_float("MIN_SCORE_TO_SHOW", 0.3)
     topk_bm25: int = _env_int("TOPK_BM25", 120)

@@ -7,7 +7,7 @@ interface FPLoginScreenProps {
   accountCount: number;
   loadError: string | null;
   authError: string | null;
-  onLogin: (employeeId: string, password: string) => void;
+  onLogin: (employeeId: string, password: string) => void | Promise<void>;
 }
 
 export default function FPLoginScreen({

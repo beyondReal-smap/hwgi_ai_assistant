@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { TODAY_TODOS } from "@/lib/data";
 import type { FPProfile, TodoItem } from "@/lib/types";
 
 function useCountUp(target: number, duration: number = 1200, delay: number = 0) {
@@ -38,16 +37,17 @@ const urgencyDot: Record<string, string> = {
 interface SidebarProps {
   fpProfile: FPProfile;
   touchCount?: number;
+  customerCount?: number;
+  todos?: TodoItem[];
 }
 
-export default function Sidebar({ fpProfile, touchCount = 0 }: SidebarProps) {
-  const [todos, setTodos] = useState<TodoItem[]>(TODAY_TODOS);
-  const totalCustomers = useCountUp(touchCount, 1400, 500);
+export default function Sidebar({ fpProfile, touchCount = 0, customerCount = 0, todos: initialTodos = [] }: SidebarProps) {
+  const [todos, setTodos] = useState<TodoItem[]>(initialTodos);
+  useEffect(() => { setTodos(initialTodos); }, [initialTodos]);
+  const completedCount = todos.filter((todo) => todo.done).length;
+  const totalCustomers = useCountUp(customerCount, 1400, 500);
   const todayTargets = useCountUp(touchCount, 800, 700);
-  const completed = useCountUp(0, 600, 900);
-  const monthly = useCountUp(92, 1000, 800);
-
-  const completedCount = todos.filter((t) => t.done).length;
+  const completed = useCountUp(completedCount, 600, 900);
   const toggleTodo = (id: string) => {
     setTodos((prev) =>
       prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
@@ -144,38 +144,6 @@ export default function Sidebar({ fpProfile, touchCount = 0 }: SidebarProps) {
               </svg>
             }
           />
-          <StatCard
-            label="이달 실적"
-            value={monthly}
-            unit="%"
-            color="text-sky-400"
-            bg="bg-sky-400/10"
-            icon={
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-sky-400/70">
-                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-                <polyline points="17 6 23 6 23 12"/>
-              </svg>
-            }
-          />
-        </div>
-
-        {/* Monthly progress bar */}
-        <div className="mt-3">
-          <div className="flex justify-between items-center mb-1">
-            <span className="text-white/50 text-xs">이달 목표 달성률</span>
-            <span className="text-sky-400 text-xs font-bold">{monthly}%</span>
-          </div>
-          <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${monthly}%` }}
-              transition={{ duration: 1.2, delay: 1.0, ease: "easeOut" }}
-              className="h-full rounded-full"
-              style={{
-                background: "linear-gradient(90deg, #38BDF8, #0EA5E9)",
-              }}
-            />
-          </div>
         </div>
       </div>
 

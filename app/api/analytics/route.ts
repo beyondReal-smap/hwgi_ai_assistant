@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
+import { validateRequest, AnalyticsSchema } from "@/lib/validation";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const LOG_FILE = path.join(DATA_DIR, "analytics.jsonl");
@@ -11,8 +12,9 @@ async function ensureDataDir() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const events: unknown[] = Array.isArray(body.events) ? body.events : [];
+    const v = validateRequest(AnalyticsSchema, await req.json());
+    if (!v.success) return NextResponse.json({ ok: false, error: v.error }, { status: 400 });
+    const events = v.data.events;
     if (events.length === 0) return NextResponse.json({ ok: true });
 
     await ensureDataDir();

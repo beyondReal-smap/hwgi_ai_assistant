@@ -7,14 +7,13 @@ import LogoutScreen from "@/components/LogoutScreen";
 import Sidebar from "@/components/Sidebar";
 import ChatWindow from "@/components/ChatWindow";
 import FPLoginScreen from "@/components/FPLoginScreen";
-import { authenticateFP } from "@/lib/fp-auth";
 import { track, setUser } from "@/lib/analytics";
-import type { FPAccount, FPProfile } from "@/lib/types";
+import type { FPProfile, TodoItem } from "@/lib/types";
 
 const FP_SESSION_KEY = "fp_logged_in_employee_id";
 
 export default function Home() {
-  const [accounts, setAccounts] = useState<FPAccount[]>([]);
+  const [accounts, setAccounts] = useState<FPProfile[]>([]);
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -27,6 +26,8 @@ export default function Home() {
   // Store FP name separately so logout screen can still show it after currentFP clears
   const [logoutFPName, setLogoutFPName] = useState("");
   const [touchCount, setTouchCount] = useState(0);
+  const [customerCount, setCustomerCount] = useState(0);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,16 +81,15 @@ export default function Home() {
       return;
     }
 
-    const savedAccount = accounts.find(
+    const savedProfile = accounts.find(
       (account) => account.employeeId === savedEmployeeId
     );
-    if (!savedAccount) {
+    if (!savedProfile) {
       window.localStorage.removeItem(FP_SESSION_KEY);
       setSessionChecked(true);
       return;
     }
 
-    const { password: _, ...savedProfile } = savedAccount;
     setCurrentFP(savedProfile);
     window.localStorage.setItem("fp_profile", JSON.stringify(savedProfile));
     setSessionChecked(true);
@@ -101,6 +101,8 @@ export default function Home() {
       setShowLoginLoading(false);
       setLoginLoadingDone(false);
       setTouchCount(0);
+      setCustomerCount(0);
+      setTodos([]);
       return;
     }
     // Fetch daily touch count for sidebar stats
@@ -110,32 +112,52 @@ export default function Home() {
       body: JSON.stringify({ stfno: currentFP.employeeId }),
     })
       .then((res) => res.json())
-      .then((data) => setTouchCount(data.totalCount ?? 0))
-      .catch(() => setTouchCount(0));
+      .then((data) => {
+        setTouchCount(data.totalCount ?? 0);
+        setCustomerCount(data.customerCount ?? 0);
+        setTodos(data.todos ?? []);
+      })
+      .catch(() => {
+        setTouchCount(0);
+        setCustomerCount(0);
+        setTodos([]);
+      });
   }, [currentFP]);
 
-  const handleLogin = (employeeId: string, password: string) => {
+  const handleLogin = async (employeeId: string, password: string) => {
     setAuthError(null);
     if (isLoadingAccounts || loadError) return;
 
-    const profile = authenticateFP(accounts, employeeId, password);
-    if (!profile) {
-      setAuthError("사번 또는 비밀번호가 올바르지 않습니다.");
-      return;
+    try {
+      const res = await fetch("/api/fp-accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId, password }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAuthError(data.error ?? "사번 또는 비밀번호가 올바르지 않습니다.");
+        return;
+      }
+
+      const profile: FPProfile = data.profile;
+
+      // Set splash state BEFORE setCurrentFP so React batches both into one render,
+      // preventing a one-frame flash of the main content.
+      setShowLoginLoading(true);
+      setLoginLoadingDone(false);
+      setTimeout(() => setLoginLoadingDone(true), 3000);
+      setTimeout(() => setShowLoginLoading(false), 3700);
+
+      setUser(profile.employeeId);
+      track("login", { employeeId: profile.employeeId, name: profile.name, branch: profile.branch });
+      setCurrentFP(profile);
+      window.localStorage.setItem(FP_SESSION_KEY, profile.employeeId);
+      window.localStorage.setItem("fp_profile", JSON.stringify(profile));
+    } catch {
+      setAuthError("로그인 처리 중 오류가 발생했습니다. 다시 시도해주세요.");
     }
-
-    // Set splash state BEFORE setCurrentFP so React batches both into one render,
-    // preventing a one-frame flash of the main content.
-    setShowLoginLoading(true);
-    setLoginLoadingDone(false);
-    setTimeout(() => setLoginLoadingDone(true), 3000);
-    setTimeout(() => setShowLoginLoading(false), 3700);
-
-    setUser(profile.employeeId);
-    track("login", { employeeId: profile.employeeId, name: profile.name, branch: profile.branch });
-    setCurrentFP(profile);
-    window.localStorage.setItem(FP_SESSION_KEY, profile.employeeId);
-    window.localStorage.setItem("fp_profile", JSON.stringify(profile));
   };
 
   const handleLogout = () => {
@@ -146,6 +168,8 @@ export default function Home() {
     setLogoutFPName(currentFP.name);
     window.localStorage.removeItem(FP_SESSION_KEY);
     window.localStorage.removeItem("fp_profile");
+    sessionStorage.removeItem("chat_state");
+    sessionStorage.removeItem("guide_selected_query");
 
     // Show logout screen immediately while main content is still visible
     setShowLogoutScreen(true);
@@ -201,7 +225,7 @@ export default function Home() {
             <AppHeader currentFP={currentFP} onLogout={handleLogout} />
 
             <div className="flex flex-1 min-h-0 overflow-hidden">
-              <Sidebar fpProfile={currentFP} touchCount={touchCount} />
+              <Sidebar fpProfile={currentFP} touchCount={touchCount} customerCount={customerCount} todos={todos} />
               <ChatWindow fpProfile={currentFP} />
             </div>
           </div>

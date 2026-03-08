@@ -2,5 +2,5 @@
   "model_name": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
   "backend": "st_numpy",
   "data_hash": "76d9aea7ec83136aeb11f9645fce1bd8",
-  "created_at": "2026-02-24T02:46:27.546258Z"
+  "created_at": "2026-03-07T12:48:55.039437Z"
 }

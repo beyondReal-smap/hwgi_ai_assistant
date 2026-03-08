@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { LMSMessage, Customer } from "@/lib/types";
 import { track } from "@/lib/analytics";
@@ -17,6 +17,14 @@ function openSmsApp(phone: string, body: string) {
   const sep = isIOS ? "&" : "?";
   const raw = phone.replace(/-/g, "");          // 010XXXXXXXX
   window.location.href = `sms:${raw}${sep}body=${encodeURIComponent(body)}`;
+}
+
+function getFocusableElements(container: HTMLElement) {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+  );
 }
 
 interface PhonePreviewModalProps {
@@ -40,15 +48,64 @@ export default function PhonePreviewModal({
   onEdit,
   onChooseOther,
 }: PhonePreviewModalProps) {
+  const titleId = useId();
+  const descriptionId = useId();
   const [currentMessage, setCurrentMessage] = useState<LMSMessage | null>(message);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [regenError, setRegenError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Sync with incoming prop changes (e.g. user selects a different message)
   useEffect(() => {
     setCurrentMessage(message);
     setRegenError(null);
   }, [message]);
+
+  useEffect(() => {
+    if (!isOpen || !currentMessage || !customer) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+
+      const focusableElements = getFocusableElements(dialog);
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    requestAnimationFrame(() => closeButtonRef.current?.focus());
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [currentMessage, customer, isOpen, onClose]);
 
   const now = new Date();
   const timeStr = now.toLocaleTimeString("ko-KR", {
@@ -117,7 +174,15 @@ export default function PhonePreviewModal({
             className="fixed inset-x-0 top-0 bottom-0 z-50 flex items-start sm:items-center justify-center px-3 sm:px-4 py-3 sm:py-4 pointer-events-none"
           >
             <div className="pointer-events-auto w-full max-w-md flex flex-col" style={{ maxHeight: "calc(100dvh - 1.5rem)" }}>
-              <div className="bg-white rounded-3xl shadow-modal overflow-hidden flex flex-col min-h-0">
+              <div
+                ref={dialogRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                aria-describedby={descriptionId}
+                tabIndex={-1}
+                className="bg-white rounded-3xl shadow-modal overflow-hidden flex flex-col min-h-0"
+              >
                 {/* Modal header — always visible */}
                 <div
                   className="flex items-center justify-between px-4 sm:px-6 py-4 shrink-0"
@@ -126,14 +191,15 @@ export default function PhonePreviewModal({
                   }}
                 >
                   <div>
-                    <h3 className="text-white font-bold text-base">
+                    <h3 id={titleId} className="text-white font-bold text-base">
                       LMS 발송 미리보기
                     </h3>
-                    <p className="text-white/60 text-xs mt-0.5">
+                    <p id={descriptionId} className="text-white/60 text-xs mt-0.5">
                       {customer.name} 고객 · {currentMessage.type}
                     </p>
                   </div>
                   <button
+                    ref={closeButtonRef}
                     onClick={onClose}
                     className="w-8 h-8 rounded-xl flex items-center justify-center bg-white/10 hover:bg-white/20 active:bg-white/30 transition-colors text-white/80 hover:text-white"
                     aria-label="닫기"

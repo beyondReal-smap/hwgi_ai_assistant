@@ -6,6 +6,7 @@ Run from the jobcode/ directory:
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
@@ -13,6 +14,11 @@ from typing import Any, Dict, List
 ROOT = Path(__file__).resolve().parent
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
+
+# Ensure the project root is on sys.path so silson_rag package is importable
+PROJECT_ROOT = ROOT.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Load API keys from the parent Next.js .env.local (shared OPENAI_API_KEY)
 from dotenv import load_dotenv
@@ -24,13 +30,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from core.bm25_engine import BM25Engine
-from core.config import SETTINGS
+from core.config import (
+    SETTINGS,
+)
 from core.cross_encoder import CrossEncoderReranker
 from core.data_loader import dataframe_hash, load_jobs, to_records
 from core.embed_engine import EmbedEngine
 from core.evidence import highlight_text, select_evidence_sentences
 from core.hybrid_ranker import merge_candidates
 from core.llm_client import rerank_with_llm
+from silson_rag.src.api import (
+    is_ready as is_silson_rag_ready,
+    is_vector_store_configured as is_silson_vector_store_configured,
+    rag_paths as silson_rag_paths,
+    search as silson_search,
+)
 from core.text_norm import load_synonyms, normalize_text, tokenize
 
 # ---------------------------------------------------------------------------
@@ -83,6 +97,21 @@ class SearchResponse(BaseModel):
     prefilter_count: int
 
 
+class SilsonSearchRequest(BaseModel):
+    query: str
+    topk: int = 5
+
+
+class SilsonSearchResponse(BaseModel):
+    query: str
+    answer: str
+    sources: List[str]
+    chunks: List[Dict[str, Any]]
+    mode: Dict[str, str]
+    filters: Dict[str, Any]
+    follow_ups: List[str] = []
+
+
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
@@ -121,7 +150,7 @@ def _rerank_with_overlap(union_rows: List[Dict], query: str) -> List[Dict]:
     for row in union_rows:
         doc_tokens = set(tokenize(f"{row['job_name']} {row['description']}"))
         overlap = len(q_tokens.intersection(doc_tokens)) / max(len(q_tokens), 1)
-        rerank_score = 0.75 * float(row["final_score"]) + 0.25 * overlap
+        rerank_score = SETTINGS.rerank_weight_score * float(row["final_score"]) + SETTINGS.rerank_weight_overlap * overlap
         item = dict(row)
         item["overlap_score"] = overlap
         item["rerank_score"] = rerank_score
@@ -152,10 +181,13 @@ def _build_candidate_rows(df, merged) -> List[Dict]:
     return rows
 
 
-def run_search(req: SearchRequest) -> Dict[str, Any]:
+def _retrieve_candidates(req: SearchRequest) -> tuple[list[dict], dict[str, str], bool, bool]:
+    """Run BM25 + embedding retrieval, merge, and overlap rerank.
+
+    Returns (union_rows, mode_partial, hybrid_enabled, ce_enabled).
+    """
     df, _, bm25, emb, ce = get_engines()
 
-    # --- Retrieval ---
     bm25_hits = bm25.search(req.query, topk=req.topk_bm25)
     embed_hits: list = []
     hybrid_enabled = req.use_hybrid and emb.status.enabled
@@ -171,12 +203,29 @@ def run_search(req: SearchRequest) -> Dict[str, Any]:
     union_rows = _build_candidate_rows(df, merged)
     union_rows = _rerank_with_overlap(union_rows, req.query)
 
-    # --- Cross-Encoder rerank ---
     ce_enabled = req.use_cross_encoder and ce.status.enabled
+
+    mode: dict[str, str] = {
+        "retrieval": "Hybrid(BM25+Embedding)" if hybrid_enabled else "BM25-only",
+        "embed_status": emb.status.reason,
+        "ce_status": ce.status.reason,
+    }
+
+    return union_rows, mode, hybrid_enabled, ce_enabled
+
+
+def _rerank_candidates(
+    req: SearchRequest, union_rows: list[dict], ce_enabled: bool
+) -> tuple[list[dict], dict[str, str], bool, Any]:
+    """Apply cross-encoder and LLM reranking.
+
+    Returns (reranked_rows, mode_updates, llm_active, llm_result).
+    """
+    _, _, _, _, ce = get_engines()
+
     if ce_enabled:
         union_rows = ce.rerank(req.query, union_rows, topk=min(req.topk_bm25, 50))
 
-    # --- LLM rerank ---
     llm_result = rerank_with_llm(
         query=req.query,
         candidates=union_rows,
@@ -188,13 +237,23 @@ def run_search(req: SearchRequest) -> Dict[str, Any]:
     )
     llm_active = req.use_llm and llm_result.mode == "real"
 
-    mode = {
-        "retrieval": "Hybrid(BM25+Embedding)" if hybrid_enabled else "BM25-only",
+    mode_updates: dict[str, str] = {
         "rerank": "cross-encoder" if ce_enabled else "rule-only",
-        "embed_status": emb.status.reason,
-        "ce_status": ce.status.reason,
         "llm_status": llm_result.mode if req.use_llm else "disabled",
     }
+
+    return union_rows, mode_updates, llm_active, llm_result
+
+
+def _build_response(
+    req: SearchRequest,
+    union_rows: list[dict],
+    mode: dict[str, str],
+    ce_enabled: bool,
+    llm_active: bool,
+    llm_result: Any,
+) -> dict[str, Any]:
+    """Select top rows, apply score threshold, build final response with evidence and highlighting."""
 
     # --- Build top_rows: LLM-ordered if active, else score-ordered ---
     topn = max(1, int(req.topk_result))
@@ -270,6 +329,13 @@ def run_search(req: SearchRequest) -> Dict[str, Any]:
     }
 
 
+def run_search(req: SearchRequest) -> Dict[str, Any]:
+    union_rows, mode, hybrid_enabled, ce_enabled = _retrieve_candidates(req)
+    union_rows, mode_updates, llm_active, llm_result = _rerank_candidates(req, union_rows, ce_enabled)
+    mode.update(mode_updates)
+    return _build_response(req, union_rows, mode, ce_enabled, llm_active, llm_result)
+
+
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
@@ -286,13 +352,19 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """Pre-load engines in a thread so the event loop is not blocked."""
-    try:
-        await asyncio.to_thread(get_engines)
-        print("[api_server] Engines loaded successfully.")
-        print(f"[api_server] LLM API key present: {bool(SETTINGS.openai_api_key)}")
-    except Exception as exc:
-        print(f"[api_server] Engine load failed: {exc}")
+    """Avoid slow model downloads at startup; jobcode engines load lazily on demand."""
+    preload = os.getenv("PRELOAD_JOBCODE_ENGINES", "").strip() in {"1", "true", "True", "yes", "on"}
+    print(f"[api_server] LLM API key present: {bool(SETTINGS.openai_api_key)}")
+    print(f"[api_server] Silson RAG ready: {is_silson_rag_ready()}")
+    print(f"[api_server] Silson vector store configured: {is_silson_vector_store_configured()}")
+    if preload:
+        try:
+            await asyncio.to_thread(get_engines)
+            print("[api_server] Jobcode engines loaded successfully.")
+        except Exception as exc:
+            print(f"[api_server] Jobcode engine load failed: {exc}")
+    else:
+        print("[api_server] Jobcode engine preload skipped. Engines will load on first /api/search request.")
 
 
 @app.get("/api/health")
@@ -301,6 +373,9 @@ async def health():
         "status": "ok",
         "engines_loaded": bool(_engines),
         "llm_ready": bool(SETTINGS.openai_api_key),
+        "silson_ready": is_silson_rag_ready(),
+        "silson_vector_store_configured": is_silson_vector_store_configured(),
+        "silson_paths": silson_rag_paths(),
     }
 
 
@@ -311,5 +386,26 @@ async def search(req: SearchRequest):
     try:
         result = await asyncio.to_thread(run_search, req)
         return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/silson-search", response_model=SilsonSearchResponse)
+async def silson_search_endpoint(req: SilsonSearchRequest):
+    if not req.query.strip():
+        raise HTTPException(status_code=400, detail="query must not be empty")
+    if not is_silson_rag_ready():
+        raise HTTPException(status_code=503, detail="silson RAG assets are not ready")
+    try:
+        result = await asyncio.to_thread(silson_search, req.query, req.topk)
+        return {
+            "query": result.query,
+            "answer": result.answer,
+            "sources": result.sources,
+            "chunks": result.chunks,
+            "mode": result.mode,
+            "filters": result.filters,
+            "follow_ups": result.follow_ups,
+        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

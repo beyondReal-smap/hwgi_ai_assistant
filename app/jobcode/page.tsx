@@ -72,14 +72,14 @@ export default function JobcodePage() {
 
       {/* ── Mobile: single-panel view ── */}
       <div className="sm:hidden flex-1 min-h-0 overflow-hidden">
-        <div className={mobileTab === "search" ? "block h-full" : "hidden"}>
+        <div className={mobileTab === "search" ? "flex h-full min-h-0" : "hidden"}>
           <JobcodeSearchPanel
             onSearch={handleSearch}
             isSearching={isSearching}
             fullWidth
           />
         </div>
-        <div className={mobileTab === "results" ? "block h-full" : "hidden"}>
+        <div className={mobileTab === "results" ? "flex h-full min-h-0" : "hidden"}>
           <JobcodeResultsPanel
             response={response}
             isSearching={isSearching}

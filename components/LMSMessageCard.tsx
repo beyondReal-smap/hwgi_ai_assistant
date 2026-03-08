@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import type { LMSMessage, Customer } from "@/lib/types";
 
@@ -37,7 +38,7 @@ interface LMSMessageCardProps {
   index: number;
 }
 
-export default function LMSMessageCard({
+const LMSMessageCard = memo(function LMSMessageCard({
   message,
   customer,
   onSelect,
@@ -105,7 +106,9 @@ export default function LMSMessageCard({
       </div>
     </motion.div>
   );
-}
+});
+
+export default LMSMessageCard;
 
 // Simple color darkening helper
 function adjustColor(hex: string, amount: number): string {

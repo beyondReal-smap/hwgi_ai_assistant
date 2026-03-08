@@ -36,6 +36,7 @@ export type UrgencyLevel = "urgent" | "high" | "normal" | "low";
 export type Gender = "남" | "여";
 
 export type LMSType = "안내형" | "감성형" | "혜택/관리형";
+export type SilsonCardTone = "intro" | "answer" | "detail" | "warning" | "sources";
 
 export interface FPProfile {
   name: string;
@@ -95,13 +96,18 @@ export interface LMSMessage {
   content: string;
 }
 
-export type MessageType = "text" | "customer-list" | "lms-list" | "analysis";
+export type MessageType = "text" | "customer-list" | "lms-list" | "analysis" | "silson-card";
 
 export interface ChatMessage {
   id: string;
   role: "bot" | "user";
   type: MessageType;
   content: string;
+  title?: string;
+  badge?: string;
+  tone?: SilsonCardTone;
+  sources?: string[];
+  followUps?: string[];
   customers?: Customer[];
   lmsMessages?: LMSMessage[];
   customerContext?: Customer;

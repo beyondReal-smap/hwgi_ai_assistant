@@ -5,18 +5,33 @@ import type { JobcodeSearchRequest } from "@/lib/jobcode-types";
 
 const EXAMPLE_QUERIES = [
   {
-    label: "보험 관리자",
-    text: "보험회사 지점에서 영업조직 운영 계획을 세우고 팀장 인력 관리를 담당하는 내근 관리자입니다.",
+    label: "보상 심사 관리자",
+    summary: "보험사 보상팀 내근 관리자",
+    text: "손해보험사 보상지원 부서에서 심사 기준을 검토하고 팀원의 보상 처리 품질을 관리하는 내근 관리자입니다. 현장 출동은 거의 없고 문서 검토, 승인, 민원 조율 업무 비중이 높습니다.",
   },
   {
-    label: "5급 공무원(내근)",
-    text: "시청에서 도시계획 정책 검토와 행정문서 결재를 담당하는 5급 이상 공무원이며 현장업무는 거의 없습니다.",
+    label: "지자체 행정 사무관",
+    summary: "정책 검토 중심의 공공 행정직",
+    text: "구청 기획예산 부서에서 정책 검토, 예산 편성, 행정문서 결재를 담당하는 5급 이상 공무원입니다. 외근보다는 회의, 보고서 작성, 조직 운영 비중이 큽니다.",
   },
   {
-    label: "대출/추심 관리자",
-    text: "대부업체에서 대출알선과 채권추심 부서 운영 및 관리 업무를 담당합니다.",
+    label: "물류센터 현장 소장",
+    summary: "하역·장비·안전 관리가 많은 현장형 직무",
+    text: "대형 물류센터에서 하역 인력 배치, 지게차 동선 관리, 안전 점검, 사고 예방 교육을 총괄하는 현장 관리자입니다. 실내 사무보다 현장 통제와 순회 비중이 높습니다.",
   },
 ];
+
+const DEFAULT_SEARCH_OPTIONS = {
+  use_hybrid: true,
+  use_cross_encoder: true,
+  use_llm: true,
+  show_highlight: true,
+  score_threshold: 0.3,
+  alpha_bm25: 0.3,
+  topk_bm25: 120,
+  topk_embed: 120,
+  topk_result: 3,
+} satisfies Omit<JobcodeSearchRequest, "query">;
 
 interface Props {
   onSearch: (params: JobcodeSearchRequest) => void;
@@ -25,249 +40,154 @@ interface Props {
 }
 
 export default function JobcodeSearchPanel({ onSearch, isSearching, fullWidth = false }: Props) {
-  const [query, setQuery] = useState(EXAMPLE_QUERIES[0].text);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // Advanced settings
-  const [useHybrid, setUseHybrid] = useState(true);
-  const [useCrossEncoder, setUseCrossEncoder] = useState(true);
-  const [useLlm, setUseLlm] = useState(true);
-  const [showHighlight, setShowHighlight] = useState(true);
-  const [scoreThreshold, setScoreThreshold] = useState(0.3);
-  const [alphaBm25, setAlphaBm25] = useState(0.3);
-  const [topkBm25, setTopkBm25] = useState(120);
-  const [topkEmbed, setTopkEmbed] = useState(120);
-  const [topkResult, setTopkResult] = useState(3);
+  const [query, setQuery] = useState("");
 
   function handleSearch() {
     if (!query.trim()) return;
     onSearch({
       query,
-      use_hybrid: useHybrid,
-      use_cross_encoder: useCrossEncoder,
-      use_llm: useLlm,
-      show_highlight: showHighlight,
-      score_threshold: scoreThreshold,
-      alpha_bm25: alphaBm25,
-      topk_bm25: topkBm25,
-      topk_embed: topkEmbed,
-      topk_result: topkResult,
+      ...DEFAULT_SEARCH_OPTIONS,
     });
   }
 
   return (
-    <div className={`${fullWidth ? "w-full" : "w-80 shrink-0"} bg-hanwha-navy flex flex-col overflow-y-auto`}>
-      <div className="p-5 flex flex-col gap-4">
-        <h2 className="text-white font-semibold text-base">입력 / 설정</h2>
+    <div
+      className={`${fullWidth ? "w-full" : "w-[25rem] shrink-0"} h-full min-h-0 overflow-y-auto border-r border-slate-200/80 bg-[linear-gradient(180deg,#FFF8F2_0%,#F7F2EA_38%,#F2F5F8_100%)]`}
+    >
+      <div className="flex flex-col gap-4 p-4 sm:p-5">
+        <section className="overflow-hidden rounded-[28px] border border-white/80 bg-white/90 shadow-[0_18px_60px_rgba(26,43,74,0.08)] backdrop-blur">
+          <div className="border-b border-slate-100 bg-[linear-gradient(135deg,rgba(243,115,33,0.12)_0%,rgba(243,115,33,0.03)_45%,rgba(26,43,74,0.02)_100%)] px-5 py-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-hanwha-orange/80">
+              Search Setup
+            </p>
+            <h2 className="mt-1 text-xl font-semibold tracking-tight text-hanwha-navy">
+              고객 직업 설명을 준비해 주세요
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500">
+              직무의 핵심 업무, 현장 여부, 관리 책임, 위험 노출 정도가 드러나면 추천 정확도가 좋아집니다.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <HintChip>내근/외근 여부</HintChip>
+              <HintChip>장비·현장 노출</HintChip>
+              <HintChip>승인·관리 책임</HintChip>
+            </div>
+          </div>
 
-        {/* Query textarea */}
-        <div className="flex flex-col gap-2">
-          <label className="text-gray-300 text-xs font-medium">고객 직업 설명</label>
-          <textarea
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            rows={6}
-            placeholder="직업 설명을 입력하세요..."
-            className="w-full bg-white/10 border border-white/20 text-white text-sm rounded-lg px-3 py-2 resize-none placeholder-gray-400 focus:outline-none focus:border-hanwha-orange transition-colors"
-          />
-        </div>
+          <div className="space-y-4 px-5 py-5">
+            <label htmlFor="jobcode-query" className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              직업 설명
+            </label>
 
-        {/* Example queries */}
-        <div className="flex flex-col gap-1.5">
-          <p className="text-gray-400 text-xs font-medium">예시 입력</p>
-          <div className="flex flex-col gap-1">
-            {EXAMPLE_QUERIES.map((ex) => (
-              <button
-                key={ex.label}
-                onClick={() => setQuery(ex.text)}
-                className="text-left text-xs px-2.5 py-1.5 rounded-md bg-white/5 hover:bg-white/15 text-gray-300 hover:text-white transition-colors border border-white/10 hover:border-white/25"
-              >
-                {ex.label}
-              </button>
+            <textarea
+              id="jobcode-query"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              rows={7}
+              placeholder="고객의 실제 업무 내용을 자연스럽게 적어주세요."
+              className="min-h-[11rem] w-full resize-y rounded-[22px] border border-slate-200 bg-[#FFFDFC] px-4 py-4 text-sm leading-6 text-slate-700 shadow-inner outline-none transition-[border,box-shadow] placeholder:text-slate-400 focus:border-hanwha-orange focus:ring-4 focus:ring-orange-100"
+            />
+
+            <div className="flex items-center justify-between gap-3 text-[11px] text-slate-400">
+              <span>{query.trim().length}자 입력됨</span>
+              <span>기본 설정으로 검색됩니다</span>
+            </div>
+
+            <button
+              onClick={handleSearch}
+              disabled={isSearching || !query.trim()}
+              className="relative w-full overflow-hidden rounded-[22px] py-3.5 text-sm font-semibold text-white transition-all shadow-[0_16px_30px_rgba(243,115,33,0.22)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+              style={{
+                background: isSearching
+                  ? "linear-gradient(135deg, rgba(243,115,33,0.88) 0%, rgba(224,106,27,0.95) 100%)"
+                  : "linear-gradient(135deg, #F37321 0%, #E06A1B 100%)",
+              }}
+            >
+              {isSearching && (
+                <span
+                  className="pointer-events-none absolute inset-0 opacity-60"
+                  style={{
+                    background:
+                      "linear-gradient(110deg, transparent 0%, rgba(255,255,255,0.16) 25%, transparent 55%)",
+                    backgroundSize: "200% 100%",
+                    animation: "shimmerMove 1.4s linear infinite",
+                  }}
+                />
+              )}
+              {isSearching ? (
+                <span className="relative z-10 flex items-center justify-center gap-2">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-white/90 animate-pulse" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-white/70 animate-pulse [animation-delay:180ms]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-white/50 animate-pulse [animation-delay:360ms]" />
+                  </span>
+                  후보를 찾는 중
+                </span>
+              ) : (
+                <span className="relative z-10">직업코드 후보 찾기</span>
+              )}
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-[24px] border border-slate-200/80 bg-white/88 p-4 shadow-sm backdrop-blur">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-hanwha-navy">예시 입력</p>
+              <p className="mt-1 text-xs text-slate-400">
+                아래 예시를 눌러 바로 교체할 수 있습니다.
+              </p>
+            </div>
+            <span className="rounded-full bg-hanwha-orange/10 px-2.5 py-1 text-[11px] font-semibold text-hanwha-orange">
+              {EXAMPLE_QUERIES.length}개
+            </span>
+          </div>
+
+          <div className="space-y-2.5">
+            {EXAMPLE_QUERIES.map((example) => (
+              <ExampleCard
+                key={example.label}
+                label={example.label}
+                summary={example.summary}
+                onClick={() => setQuery(example.text)}
+              />
             ))}
           </div>
-        </div>
-
-        {/* Search button */}
-        <button
-          onClick={handleSearch}
-          disabled={isSearching || !query.trim()}
-          className="w-full py-2.5 rounded-xl font-semibold text-sm text-white
-            bg-gradient-to-r from-hanwha-orange to-orange-500
-            hover:from-orange-500 hover:to-orange-400
-            disabled:opacity-50 disabled:cursor-not-allowed
-            transition-all shadow-md active:scale-95"
-        >
-          {isSearching ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-              검색 중...
-            </span>
-          ) : (
-            "후보 검색"
-          )}
-        </button>
-
-        {/* Advanced settings */}
-        <div className="border border-white/15 rounded-lg overflow-hidden">
-          <button
-            onClick={() => setShowAdvanced((v) => !v)}
-            className="w-full flex items-center justify-between px-3 py-2.5 text-gray-300 hover:text-white hover:bg-white/5 transition-colors text-xs font-medium"
-          >
-            <span>고급 설정</span>
-            <svg
-              className={`w-4 h-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          </button>
-
-          {showAdvanced && (
-            <div className="px-3 pb-3 flex flex-col gap-3 bg-black/10">
-              {/* Toggles */}
-              <ToggleRow
-                label="하이브리드 사용 (BM25+Embedding)"
-                checked={useHybrid}
-                onChange={setUseHybrid}
-              />
-              <ToggleRow
-                label="Cross-Encoder 재랭크"
-                checked={useCrossEncoder}
-                onChange={setUseCrossEncoder}
-              />
-              <ToggleRow
-                label="GPT 최종 재랭크 (LLM)"
-                checked={useLlm}
-                onChange={setUseLlm}
-              />
-              <ToggleRow
-                label="하이라이트 표시"
-                checked={showHighlight}
-                onChange={setShowHighlight}
-              />
-
-              {/* Sliders */}
-              <SliderRow
-                label="최소 표시 점수"
-                value={scoreThreshold}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={setScoreThreshold}
-                format={(v) => v.toFixed(2)}
-              />
-              <SliderRow
-                label="BM25 가중치 (alpha)"
-                value={alphaBm25}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={setAlphaBm25}
-                format={(v) => v.toFixed(2)}
-              />
-              <SliderRow
-                label="BM25 후보 수 (TOPK)"
-                value={topkBm25}
-                min={20}
-                max={300}
-                step={10}
-                onChange={setTopkBm25}
-                format={(v) => String(v)}
-              />
-              <SliderRow
-                label="Embedding 후보 수 (TOPK)"
-                value={topkEmbed}
-                min={20}
-                max={300}
-                step={10}
-                onChange={setTopkEmbed}
-                format={(v) => String(v)}
-              />
-              <SliderRow
-                label="최종 추천 개수"
-                value={topkResult}
-                min={1}
-                max={10}
-                step={1}
-                onChange={setTopkResult}
-                format={(v) => String(v)}
-              />
-            </div>
-          )}
-        </div>
+        </section>
       </div>
     </div>
   );
 }
 
-function ToggleRow({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
+function HintChip({ children }: { children: React.ReactNode }) {
   return (
-    <label className="flex items-center justify-between gap-2 cursor-pointer pt-2">
-      <span className="text-gray-300 text-xs">{label}</span>
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 ${
-          checked ? "bg-hanwha-orange" : "bg-white/20"
-        }`}
-      >
-        <span
-          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-            checked ? "translate-x-4" : "translate-x-1"
-          }`}
-        />
-      </button>
-    </label>
+    <span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[11px] font-medium text-hanwha-orange">
+      {children}
+    </span>
   );
 }
 
-function SliderRow({
+function ExampleCard({
   label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-  format,
+  summary,
+  onClick,
 }: {
   label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
-  format: (v: number) => string;
+  summary: string;
+  onClick: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-1 pt-2">
-      <div className="flex justify-between items-center">
-        <span className="text-gray-300 text-xs">{label}</span>
-        <span className="text-hanwha-orange text-xs font-mono font-semibold">{format(value)}</span>
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex w-full items-center justify-between gap-3 rounded-[20px] border border-slate-200 bg-[linear-gradient(135deg,#FFFFFF_0%,#FFF7F1_100%)] px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md"
+    >
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-hanwha-navy">{label}</p>
+        <p className="mt-1 text-xs leading-relaxed text-slate-500">{summary}</p>
       </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-1.5 rounded-full appearance-none bg-white/20 accent-hanwha-orange cursor-pointer"
-      />
-    </div>
+      <span className="shrink-0 rounded-full border border-orange-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-hanwha-orange transition-colors group-hover:bg-orange-50">
+        적용
+      </span>
+    </button>
   );
 }

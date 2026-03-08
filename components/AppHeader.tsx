@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { FPProfile } from "@/lib/types";
 
 const NAV_ITEMS: { label: string; href: string; comingSoon?: boolean; bookmark?: boolean }[] = [
   { label: "AI 영업비서", href: "/" },
   { label: "사용법", href: "/guide", bookmark: true },
-  { label: "직업분류", href: "/jobcode", comingSoon: true },
+  { label: "직업분류", href: "/jobcode" },
 ];
 const KST_TIMEZONE = "Asia/Seoul";
 const FP_SESSION_KEY = "fp_logged_in_employee_id";
@@ -47,16 +47,23 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 function ProfileDropdown({
+  id,
   fp,
   onLogout,
   onClose,
 }: {
+  id: string;
   fp: FPProfile;
   onLogout: () => void;
   onClose: () => void;
 }) {
   return (
-    <div className="absolute right-0 top-full mt-2 w-60 bg-white rounded-2xl shadow-modal border border-gray-100 overflow-hidden z-50">
+    <div
+      id={id}
+      role="dialog"
+      aria-label="내 프로필 메뉴"
+      className="absolute right-0 top-full mt-2 w-60 bg-white rounded-2xl shadow-modal border border-gray-100 overflow-hidden z-50"
+    >
       {/* Profile header */}
       <div
         className="px-4 py-4"
@@ -110,12 +117,15 @@ interface AppHeaderProps {
 export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const profileDropdownIdMobile = useId();
+  const profileDropdownIdDesktop = useId();
   const [currentDate, setCurrentDate] = useState("");
   const [currentDateShort, setCurrentDateShort] = useState("");
   const [internalLoggedIn, setInternalLoggedIn] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const profileRefMobile = useRef<HTMLDivElement>(null);
   const profileRefDesktop = useRef<HTMLDivElement>(null);
+  const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     const syncDate = () => {
@@ -147,21 +157,43 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
     }
   }, [currentFP]);
 
-  // Close dropdown on outside click
+  const closeProfile = useCallback((restoreFocus = false) => {
+    setShowProfile(false);
+    if (restoreFocus) {
+      requestAnimationFrame(() => lastTriggerRef.current?.focus());
+    }
+  }, []);
+
+  const handleProfileToggle = (event: React.MouseEvent<HTMLButtonElement>) => {
+    lastTriggerRef.current = event.currentTarget;
+    setShowProfile((value) => !value);
+  };
+
+  // Close dropdown on outside click / Escape
   useEffect(() => {
     if (!showProfile) return;
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as Node;
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as Node;
       if (
         !profileRefMobile.current?.contains(target) &&
         !profileRefDesktop.current?.contains(target)
       ) {
-        setShowProfile(false);
+        closeProfile();
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeProfile(true);
       }
     };
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [showProfile]);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeProfile, showProfile]);
 
   const handleLogout = () => {
     if (onLogout) {
@@ -182,50 +214,65 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
     <header className="bg-hanwha-navy relative z-30 shrink-0">
       {/* ── Mobile header ── */}
       <div className="sm:hidden">
-        {/* Row 1 — fixed height 40px */}
-        <div className="flex items-center h-10 px-3 gap-2">
+        <div className="flex items-center h-12 px-3 gap-1.5">
           <img
             src="/hwgi.png"
             alt="한화손해보험"
-            className="h-16 object-contain shrink-0"
+            className="h-10 object-contain shrink-0"
           />
           <div className="flex-1 min-w-0" />
-          <div className="flex items-center gap-1 bg-emerald-500/20 border border-emerald-500/30 rounded-full px-2 py-0.5 shrink-0">
+          <div className="flex items-center gap-1 bg-emerald-500/20 border border-emerald-500/30 rounded-full px-1.5 py-0.5 shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] text-emerald-300 font-semibold leading-none">
+            <span className="hidden min-[390px]:inline text-[10px] text-emerald-300 font-semibold leading-none">
               정상
             </span>
           </div>
-          <span className="text-[11px] text-white/50 font-medium shrink-0">
+          <span className="hidden min-[390px]:inline text-[11px] text-white/50 font-medium shrink-0">
             {currentDateShort}
           </span>
           {currentFP && (
             <div className="relative shrink-0" ref={profileRefMobile}>
               <button
-                onClick={() => setShowProfile((v) => !v)}
+                onClick={handleProfileToggle}
                 className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold transition-all"
                 style={avatarButtonStyle}
                 aria-label="내 프로필"
+                aria-haspopup="dialog"
+                aria-expanded={showProfile}
+                aria-controls={profileDropdownIdMobile}
               >
                 {currentFP.profileInitials}
               </button>
               {showProfile && (
-                <ProfileDropdown fp={currentFP} onLogout={handleLogout} onClose={() => setShowProfile(false)} />
+                <ProfileDropdown
+                  id={profileDropdownIdMobile}
+                  fp={currentFP}
+                  onLogout={handleLogout}
+                  onClose={() => closeProfile()}
+                />
               )}
             </div>
           )}
           {!currentFP && internalLoggedIn && storedFP && (
             <div className="relative shrink-0" ref={profileRefMobile}>
               <button
-                onClick={() => setShowProfile((v) => !v)}
+                onClick={handleProfileToggle}
                 className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold transition-all"
                 style={avatarButtonStyle}
                 aria-label="내 프로필"
+                aria-haspopup="dialog"
+                aria-expanded={showProfile}
+                aria-controls={profileDropdownIdMobile}
               >
                 {storedFP.profileInitials}
               </button>
               {showProfile && (
-                <ProfileDropdown fp={storedFP} onLogout={handleLogout} onClose={() => setShowProfile(false)} />
+                <ProfileDropdown
+                  id={profileDropdownIdMobile}
+                  fp={storedFP}
+                  onLogout={handleLogout}
+                  onClose={() => closeProfile()}
+                />
               )}
             </div>
           )}
@@ -374,30 +421,46 @@ export default function AppHeader({ currentFP, onLogout }: AppHeaderProps) {
           {currentFP && (
             <div className="relative shrink-0" ref={profileRefDesktop}>
               <button
-                onClick={() => setShowProfile((v) => !v)}
+                onClick={handleProfileToggle}
                 className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold transition-all"
                 style={avatarButtonStyle}
                 aria-label="내 프로필"
+                aria-haspopup="dialog"
+                aria-expanded={showProfile}
+                aria-controls={profileDropdownIdDesktop}
               >
                 {currentFP.profileInitials}
               </button>
               {showProfile && (
-                <ProfileDropdown fp={currentFP} onLogout={handleLogout} onClose={() => setShowProfile(false)} />
+                <ProfileDropdown
+                  id={profileDropdownIdDesktop}
+                  fp={currentFP}
+                  onLogout={handleLogout}
+                  onClose={() => closeProfile()}
+                />
               )}
             </div>
           )}
           {!currentFP && internalLoggedIn && storedFP && (
             <div className="relative shrink-0" ref={profileRefDesktop}>
               <button
-                onClick={() => setShowProfile((v) => !v)}
+                onClick={handleProfileToggle}
                 className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold transition-all"
                 style={avatarButtonStyle}
                 aria-label="내 프로필"
+                aria-haspopup="dialog"
+                aria-expanded={showProfile}
+                aria-controls={profileDropdownIdDesktop}
               >
                 {storedFP.profileInitials}
               </button>
               {showProfile && (
-                <ProfileDropdown fp={storedFP} onLogout={handleLogout} onClose={() => setShowProfile(false)} />
+                <ProfileDropdown
+                  id={profileDropdownIdDesktop}
+                  fp={storedFP}
+                  onLogout={handleLogout}
+                  onClose={() => closeProfile()}
+                />
               )}
             </div>
           )}

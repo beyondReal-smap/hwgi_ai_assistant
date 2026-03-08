@@ -1,4 +1,4 @@
-import type { Customer, FPProfile, LMSMessage, TodoItem } from "./types";
+import type { Customer, FPProfile, LMSMessage } from "./types";
 
 export const FP_PROFILE: FPProfile = {
   name: "김한화",
@@ -2703,35 +2703,3 @@ export const LMS_MESSAGES: Record<string, LMSMessage[]> = {
   ],
 };
 
-export const TODAY_TODOS: TodoItem[] = [
-  {
-    id: "t001",
-    text: "만기도래 고객 연락 (강충심 — 오늘 만기)",
-    done: false,
-    urgency: "urgent",
-  },
-  {
-    id: "t002",
-    text: "연체 보험료 안내 (손유희, 한선희)",
-    done: false,
-    urgency: "urgent",
-  },
-  {
-    id: "t003",
-    text: "생일 LMS 발송 (고한준, 김한준)",
-    done: true,
-    urgency: "normal",
-  },
-  {
-    id: "t004",
-    text: "자동이체 미인출 확인 (이용철, 정희정)",
-    done: false,
-    urgency: "high",
-  },
-  {
-    id: "t005",
-    text: "가입설계 동의 만료 안내 (김은서)",
-    done: false,
-    urgency: "high",
-  },
-];

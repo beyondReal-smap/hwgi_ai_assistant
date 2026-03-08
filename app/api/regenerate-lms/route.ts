@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 import type { Customer, LMSMessage } from "@/lib/types";
-
-const MODEL = process.env.OPENAI_MODEL ?? "gpt-5.2-chat-latest";
-
-const CS_PHONE = "1566-8000";
+import { callLlm, extractJson } from "@/lib/openai-service";
+import { CS_PHONE } from "@/lib/constants";
+import { validateRequest, RegenerateLmsSchema } from "@/lib/validation";
 
 function buildRegeneratePrompt(
   customer: Customer,
@@ -48,88 +46,22 @@ ${existingContent}
 {"type":"${messageType}","title":"제목","content":"본문"}`;
 }
 
-/** gpt-5-mini 등 신규 모델용: Responses API 사용 */
-async function callResponsesAPI(prompt: string): Promise<string> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response = await (new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) as any).responses.create({
-    model: MODEL,
-    input: prompt,
-  });
-  if (typeof response?.output_text === "string") return response.output_text;
-  if (Array.isArray(response?.output)) {
-    for (const item of response.output) {
-      if (item?.type === "message" && Array.isArray(item?.content)) {
-        for (const c of item.content) {
-          if (c?.type === "output_text" && typeof c?.text === "string")
-            return c.text;
-        }
-      }
-    }
-  }
-  return "";
-}
-
-/** 구형 모델용: Chat Completions API 사용 */
-async function callChatAPI(prompt: string): Promise<string> {
-  const completion = await new OpenAI({ apiKey: process.env.OPENAI_API_KEY }).chat.completions.create({
-    model: MODEL,
-    messages: [{ role: "user", content: prompt }],
-    max_completion_tokens: 800,
-  });
-  return completion.choices[0]?.message?.content ?? "";
-}
-
-function parseJsonResponse(
-  raw: string
-): { type: string; title: string; content: string } | null {
-  if (!raw || raw.trim().length === 0) return null;
-  const stripped = raw
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```\s*$/, "")
-    .trim();
-  const jsonMatch = stripped.match(/\{[\s\S]*\}/);
-  const jsonStr = jsonMatch ? jsonMatch[0] : stripped;
-  const parsed = JSON.parse(jsonStr) as {
-    type: string;
-    title: string;
-    content: string;
-  };
-  return parsed;
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const customer: Customer = body.customer;
-    const messageType: string = body.messageType;
-    const existingContent: string = body.existingContent ?? "";
-    const fpName: string = body.fpName ?? "담당 FP";
-
-    if (!customer?.id || !messageType) {
-      return NextResponse.json(
-        { error: "Invalid request data" },
-        { status: 400 }
-      );
-    }
+    const v = validateRequest(RegenerateLmsSchema, body);
+    if (!v.success) return NextResponse.json({ error: v.error }, { status: 400 });
+    const { customer: rawCustomer, messageType, existingContent: rawContent, fpName: rawFpName } = v.data;
+    const customer = rawCustomer as Customer;
+    const existingContent = rawContent ?? "";
+    const fpName = rawFpName ?? "담당 FP";
 
     const prompt = buildRegeneratePrompt(customer, messageType, existingContent, fpName);
-    let raw = "";
-
-    try {
-      raw = await callResponsesAPI(prompt);
-      console.log("[regenerate-lms/responses] len:", raw.length);
-    } catch (err) {
-      console.warn(
-        "[regenerate-lms/responses] failed, trying chat API:",
-        (err as Error).message
-      );
-      raw = await callChatAPI(prompt);
-      console.log("[regenerate-lms/chat] len:", raw.length);
-    }
-
+    const raw = await callLlm(prompt, { maxTokens: 800 });
+    console.log("[regenerate-lms] len:", raw.length);
     console.log("[regenerate-lms raw preview]", raw.slice(0, 200));
 
-    const parsed = parseJsonResponse(raw);
+    const parsed = extractJson<{ type: string; title: string; content: string }>(raw);
 
     if (!parsed) {
       return NextResponse.json(

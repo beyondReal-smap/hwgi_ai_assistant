@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { parseCsvLine, toYmd, fuzzyScore } from "./csv-utils";
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -55,43 +56,6 @@ export interface CsvCoverageWithProduct extends CsvCoverage {
 
 // ─── CSV Parsing ─────────────────────────────────────────
 
-function parseCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
-    const next = line[i + 1];
-
-    if (ch === '"' && inQuotes && next === '"') {
-      current += '"';
-      i += 1;
-      continue;
-    }
-    if (ch === '"') {
-      inQuotes = !inQuotes;
-      continue;
-    }
-    if (ch === "," && !inQuotes) {
-      out.push(current.trim());
-      current = "";
-      continue;
-    }
-    current += ch;
-  }
-
-  out.push(current.trim());
-  return out;
-}
-
-/** "2024-04-05 00:00:00.0" → "20240405", 이미 YYYYMMDD면 그대로 */
-function toYmd(raw: string): string {
-  if (!raw) return "";
-  const d = raw.trim().slice(0, 10); // "2024-04-05" or "20240405"
-  return d.replace(/-/g, "");
-}
-
 function loadCsv(filename: string): string[][] {
   const filePath = path.join(process.cwd(), "lib", "data", filename);
   const raw = fs.readFileSync(filePath, "utf-8").replace(/^\uFEFF/, "").trim();
@@ -107,9 +71,10 @@ const customerRows = loadCsv("customer.csv");
 const goodsRows = loadCsv("goods.csv");
 const cvrRows = loadCsv("cvr.csv");
 
+// fp.csv: ORGNM, NM, STFNO, ...
 const FP_LIST: CsvFP[] = fpRows.map((r) => ({
-  name: r[0],
-  staffNo: r[1],
+  name: r[1],
+  staffNo: r[2],
 }));
 
 // customer.csv: ORGNM,NM,RSNO,NTRDT,STF_FLGCD,STF_BZ_STCD,계약자명,계약자주민번호,BORN_YR,BORN_MNDY,MKTG_TL_RCV_YN,JBCD,SEXCD,WPCNM
@@ -179,28 +144,6 @@ const COVERAGE_LIST: CsvCoverage[] = cvrRows.map((r) => ({
 }));
 
 // ─── Fuzzy Search ────────────────────────────────────────
-
-/** 문자열에서 바이그램(2글자 슬라이딩 윈도우) 생성 */
-function makeBigrams(s: string): string[] {
-  const n = s.replace(/\s+/g, "");
-  const out: string[] = [];
-  for (let i = 0; i < n.length - 1; i++) out.push(n.slice(i, i + 2));
-  return out;
-}
-
-/** 퍼지 매칭 점수 (0~1): keyword가 target에 얼마나 포함되는지 */
-function fuzzyScore(keyword: string, target: string): number {
-  const kw = keyword.replace(/\s+/g, "");
-  const tg = target.replace(/\s+/g, "");
-  // 정확한 부분문자열 매치 → 최고 점수
-  if (tg.includes(kw)) return 1.0;
-  // 바이그램 겹침률
-  const bgs = makeBigrams(kw);
-  if (bgs.length === 0) return 0;
-  let hit = 0;
-  for (const bg of bgs) if (tg.includes(bg)) hit++;
-  return hit / bgs.length;
-}
 
 const FUZZY_THRESHOLD = 0.6;
 

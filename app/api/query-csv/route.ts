@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validateRequest, QueryCsvSchema } from "@/lib/validation";
 import {
   getFPList,
   getCustomersByFP,
@@ -6,7 +7,6 @@ import {
   getProductRanking,
   getProductList,
   getGoodsDetailByCustomer,
-  getCoveragesByCustomer,
   getCustomerProducts,
   getCoveragesExpiringSoon,
   searchByProductName,
@@ -21,47 +21,40 @@ import {
   genderLabel,
   type CsvCustomer,
   type CsvGoodsDetail,
-  type CsvCoverageWithProduct,
 } from "@/lib/csv-data";
-
-interface QueryCsvRequest {
-  intent: string;
-  targetName?: string | null;
-  fpName?: string | null;
-  params?: {
-    months?: number | null;
-    keyword?: string | null;
-    gender?: string | null;
-    ageMin?: number | null;
-    ageMax?: number | null;
-    month?: number | null;
-  };
-}
 
 // ─── Table Formatter ─────────────────────────────────────
 
+/** Generic markdown table builder */
+function buildTable(headers: string[], rows: string[][]): string {
+  const headerLine = `| ${headers.join(" | ")} |`;
+  const divider = `|${headers.map(() => "---").join("|")}|`;
+  const dataLines = rows.map((cells) => `| ${cells.join(" | ")} |`);
+  return [headerLine, divider, ...dataLines].join("\n");
+}
+
 function customerTable(customers: CsvCustomer[]): string {
-  const header = "| # | 이름 | 성별 | 나이 | 생년월일 | 직장 | 마케팅 |";
-  const divider = "|---|------|------|------|----------|------|--------|";
+  const headers = ["#", "이름", "성별", "나이", "생년월일", "직장", "마케팅"];
   const rows = customers.map((c, i) => {
     const age = calculateAge(c.birthYear);
     const sex = genderLabel(c.gender);
     const birth = `${c.birthYear}-${c.birthMndy.slice(0, 2)}-${c.birthMndy.slice(2, 4)}`;
     const wp = c.workplace || "-";
     const mkt = c.marketingConsent === "Y" ? "O" : "-";
-    return `| ${i + 1} | ${c.customerName} | ${sex} | ${age} | ${birth} | ${wp} | ${mkt} |`;
+    return [String(i + 1), c.customerName, sex, String(age), birth, wp, mkt];
   });
-  return [header, divider, ...rows].join("\n");
+  return buildTable(headers, rows);
 }
 
 // ─── Format Functions ────────────────────────────────────
 
 function formatFPList(): string {
   const fps = getFPList();
-  const header = "| # | 설계사명 | 사번 |";
-  const divider = "|---|----------|------|";
-  const rows = fps.map((fp, i) => `| ${i + 1} | ${fp.name} | ${fp.staffNo} |`);
-  return `📋 신주안지점 설계사 목록 (${fps.length}명)\n\n${[header, divider, ...rows].join("\n")}`;
+  const table = buildTable(
+    ["#", "설계사명", "사번"],
+    fps.map((fp, i) => [String(i + 1), fp.name, fp.staffNo])
+  );
+  return `📋 신주안지점 설계사 목록 (${fps.length}명)\n\n${table}`;
 }
 
 function formatFPCustomers(fpName: string): string {
@@ -128,18 +121,20 @@ function formatBirthMonthCustomers(month?: number, fpName?: string): string {
 
 function formatProductRanking(): string {
   const products = getProductRanking();
-  const header = "| # | 상품명 | 가입건수 |";
-  const divider = "|---|--------|----------|";
-  const rows = products.map((p, i) => `| ${i + 1} | ${p.productName} | ${p.count}건 |`);
-  return `📊 상품별 가입 건수 (인기순)\n\n${[header, divider, ...rows].join("\n")}`;
+  const table = buildTable(
+    ["#", "상품명", "가입건수"],
+    products.map((p, i) => [String(i + 1), p.productName, `${p.count}건`])
+  );
+  return `📊 상품별 가입 건수 (인기순)\n\n${table}`;
 }
 
 function formatProductList(): string {
   const products = getProductList();
-  const header = "| # | 상품코드 | 상품명 | 가입건수 |";
-  const divider = "|---|----------|--------|----------|";
-  const rows = products.map((p, i) => `| ${i + 1} | ${p.productCode} | ${p.productName} | ${p.count}건 |`);
-  return `📋 취급 상품 목록 (${products.length}종)\n\n${[header, divider, ...rows].join("\n")}`;
+  const table = buildTable(
+    ["#", "상품코드", "상품명", "가입건수"],
+    products.map((p, i) => [String(i + 1), p.productCode, p.productName, `${p.count}건`])
+  );
+  return `📋 취급 상품 목록 (${products.length}종)\n\n${table}`;
 }
 
 function formatCustomerCoverage(customerName: string): string {
@@ -161,11 +156,19 @@ function formatCustomerCoverage(customerName: string): string {
   const sections: string[] = [];
   for (const [policyNo, items] of policyGroups) {
     const productName = items[0].productName;
-    const cvrLines = items.map((d, i) => {
-      const prefix = i === items.length - 1 ? "└" : "├";
-      return `${prefix} ${d.coverageName} (${d.coverageCode}) | ${formatDate(d.insuranceStart)} ~ ${formatDate(d.insuranceEnd)}`;
-    });
-    sections.push(`증권번호: ${policyNo}\n상품: ${productName}\n${cvrLines.join("\n")}`);
+    // 보험기간: 동일하면 1줄, 다르면 최소~최대
+    const starts = [...new Set(items.map((d) => formatDate(d.insuranceStart)))];
+    const ends = [...new Set(items.map((d) => formatDate(d.insuranceEnd)))];
+    const period = starts.length === 1 && ends.length === 1
+      ? `${starts[0]} ~ ${ends[0]}`
+      : `${starts.sort()[0]} ~ ${ends.sort().reverse()[0]}`;
+
+    const sectionHeader = `📌 ${productName}\n증권: ${policyNo} | 보험기간: ${period}`;
+    const table = buildTable(
+      ["#", "담보명", "담보코드"],
+      items.map((d, i) => [String(i + 1), d.coverageName, d.coverageCode])
+    );
+    sections.push(`${sectionHeader}\n\n${table}`);
   }
 
   const customerInfo = getAllCustomers().find((c) => c.customerName === customerName);
@@ -187,12 +190,11 @@ function formatExpiryCoverage(months: number): string {
   }
 
   const policySet = new Set(coverages.map((c) => c.policyNo));
-  const header = "| 고객명 | 상품명 | 증권번호 | 담보명 | 만기일 |";
-  const divider = "|--------|--------|----------|--------|--------|";
-  const rows = coverages.map(
-    (c) => `| ${c.customerName} | ${c.productName} | ${c.policyNo} | ${c.coverageName} | ${formatDate(c.insuranceEnd)} |`
+  const table = buildTable(
+    ["고객명", "상품명", "증권번호", "담보명", "만기일"],
+    coverages.map((c) => [c.customerName, c.productName, c.policyNo, c.coverageName, formatDate(c.insuranceEnd)])
   );
-  return `📅 ${months}개월 이내 만기 도래 담보 (${coverages.length}건, 증권 ${policySet.size}건)\n\n${[header, divider, ...rows].join("\n")}`;
+  return `📅 ${months}개월 이내 만기 도래 담보 (${coverages.length}건, 증권 ${policySet.size}건)\n\n${table}`;
 }
 
 function formatProductSearch(keyword: string): string {
@@ -211,15 +213,13 @@ function formatProductSearch(keyword: string): string {
     byCustomer.set(d.customerName, arr);
   }
 
-  const header = "| 고객명 | 상품명 | 주요 담보 |";
-  const divider = "|--------|--------|-----------|";
-  const rows: string[] = [];
+  const tableRows: string[][] = [];
   for (const [name, items] of byCustomer) {
     const cvrNames = [...new Set(items.map((d) => d.coverageName))].slice(0, 3).join(", ");
-    rows.push(`| ${name} | ${items[0].productName} | ${cvrNames} |`);
+    tableRows.push([name, items[0].productName, cvrNames]);
   }
 
-  return `🔍 "${keyword}" 상품 가입 현황 (고객 ${customerSet.size}명, 증권 ${policySet.size}건)\n\n${[header, divider, ...rows].join("\n")}`;
+  return `🔍 "${keyword}" 상품 가입 현황 (고객 ${customerSet.size}명, 증권 ${policySet.size}건)\n\n${buildTable(["고객명", "상품명", "주요 담보"], tableRows)}`;
 }
 
 function formatCoverageSearch(keyword: string): string {
@@ -237,22 +237,22 @@ function formatCoverageSearch(keyword: string): string {
     byCustomer.set(d.customerName, arr);
   }
 
-  const header = "| 고객명 | 상품명 | 담보명 | 보험기간 |";
-  const divider = "|--------|--------|--------|----------|";
-  const rows: string[] = [];
+  const tableRows: string[][] = [];
   for (const [name, items] of byCustomer) {
     const products = [...new Set(items.map((d) => d.productName))].join(", ");
-    rows.push(`| ${name} | ${products} | ${items[0].coverageName} | ${formatDate(items[0].insuranceStart)}~${formatDate(items[0].insuranceEnd)} |`);
+    tableRows.push([name, products, items[0].coverageName, `${formatDate(items[0].insuranceStart)}~${formatDate(items[0].insuranceEnd)}`]);
   }
 
-  return `🔍 "${keyword}" 담보 가입 현황 (고객 ${customerSet.size}명, 담보 ${details.length}건)\n\n${[header, divider, ...rows].join("\n")}`;
+  return `🔍 "${keyword}" 담보 가입 현황 (고객 ${customerSet.size}명, 담보 ${details.length}건)\n\n${buildTable(["고객명", "상품명", "담보명", "보험기간"], tableRows)}`;
 }
 
 // ─── Route Handler ───────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
-    const { intent, targetName, fpName, params } = (await req.json()) as QueryCsvRequest;
+    const v = validateRequest(QueryCsvSchema, await req.json());
+    if (!v.success) return NextResponse.json({ text: v.error }, { status: 400 });
+    const { intent, targetName, fpName, params } = v.data;
     const fp = fpName ?? undefined;
 
     let text: string;

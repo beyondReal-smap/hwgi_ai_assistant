@@ -1,4 +1,5 @@
 import type { FPAccount, FPProfile } from "./types";
+import { parseCsvLine } from "./csv-utils";
 
 const HEADER_ALIASES = {
   name: ["name", "fp_name", "fp", "이름", "성명", "설계사명", "fp명"],
@@ -23,39 +24,6 @@ type CanonicalHeader = keyof typeof HEADER_ALIASES;
 
 function normalizeHeader(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "");
-}
-
-function parseCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
-    const next = line[i + 1];
-
-    if (ch === '"' && inQuotes && next === '"') {
-      current += '"';
-      i += 1;
-      continue;
-    }
-
-    if (ch === '"') {
-      inQuotes = !inQuotes;
-      continue;
-    }
-
-    if (ch === "," && !inQuotes) {
-      out.push(current.trim());
-      current = "";
-      continue;
-    }
-
-    current += ch;
-  }
-
-  out.push(current.trim());
-  return out.map((v) => (v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v));
 }
 
 function detectHeaderIndexes(headers: string[]): Partial<Record<CanonicalHeader, number>> {

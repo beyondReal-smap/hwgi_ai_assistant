@@ -9,7 +9,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
 };
 
 export default function RootLayout({
@@ -31,7 +30,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-[100dvh] overflow-hidden bg-[#F0F4F8]">{children}</body>
+      <body className="min-h-[100dvh] bg-[#F0F4F8]">{children}</body>
     </html>
   );
 }

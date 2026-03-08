@@ -6,25 +6,24 @@ import {
   useRef,
   useCallback,
 } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import type { SilsonSearchResponse } from "@/lib/silson-types";
 import type { ChatMessage, Customer, FPProfile, LMSMessage } from "@/lib/types";
+import type { QueryIntent, QueryParams, ParsedQuery } from "@/lib/query-filters";
+import { filterByIntent, getCrmRequiredMessage, getBotText, urgencyOrder, CRM_REQUIRED_INTENTS, CSV_DATA_INTENTS } from "@/lib/query-filters";
+import type { SilsonCardSpec } from "@/lib/silson-parser";
+import { buildSilsonCards } from "@/lib/silson-parser";
+import { QUICK_ACTIONS } from "@/lib/constants";
 import { LMS_MESSAGES } from "@/lib/data";
 import { track } from "@/lib/analytics";
 import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
 import PhonePreviewModal from "./PhonePreviewModal";
 
-const QUICK_ACTIONS = [
-  { label: "오늘 터치", query: "오늘 터치할 고객 보여줘" },
-  { label: "내 전체고객", query: "내 담당 고객 목록 보여줘" },
-  { label: "만기/갱신", query: "만기 갱신 고객 알려줘" },
-  { label: "미납/미인출", query: "연체 미인출 고객 보여줘" },
-  { label: "생일", query: "오늘 생일인 고객 있어?" },
-  { label: "설계사 목록", query: "우리 지점 설계사 목록 보여줘" },
-  { label: "인기 상품", query: "가장 많이 가입한 상품 순위 보여줘" },
-  { label: "만기 담보", query: "올해 만기 도래 담보 현황 보여줘" },
-];
+const CHAT_STATE_KEY = "chat_state";
+const GUIDE_QUERY_KEY = "guide_selected_query";
 
 function createGreetingMessage(fpProfile: FPProfile, touchCount?: number): ChatMessage {
   const countText = touchCount != null ? `${touchCount}명` : "";
@@ -41,67 +40,6 @@ function createGreetingMessage(fpProfile: FPProfile, touchCount?: number): ChatM
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-type QueryIntent =
-  // 이벤트/활동 기반
-  | "birthday"
-  | "birth_month"
-  | "expiry"
-  | "expiry_months"
-  | "overdue"
-  | "thankyou"
-  | "untouched"
-  | "low_coverage"
-  | "plan_expiry"
-  // 고객 속성 기반
-  | "gender_filter"
-  | "age_filter"
-  | "insurance_type"
-  | "urgency_filter"
-  // 담보/상품 기반 (CRM 연동 필요)
-  | "no_product"
-  | "has_claim"
-  | "prospect"
-  | "transferred"
-  // 데이터 조회 (CSV 기반)
-  | "fp_list"
-  | "fp_customers"
-  | "my_customers"
-  | "csv_gender_filter"
-  | "csv_age_filter"
-  | "workplace_search"
-  | "marketing_consent"
-  | "csv_birth_month"
-  | "product_ranking"
-  | "product_list"
-  | "customer_coverage"
-  | "expiry_coverage"
-  | "product_search"
-  | "coverage_search"
-  // 기타
-  | "name_search"
-  | "all"
-  | "off_topic";
-
-interface QueryParams {
-  gender?: string | null;
-  ageMin?: number | null;
-  ageMax?: number | null;
-  insuranceType?: string | null;
-  productType?: string | null;
-  month?: number | null;
-  months?: number | null;
-  urgency?: string | null;
-  keyword?: string | null;
-}
-
-interface ParsedQuery {
-  intent: QueryIntent;
-  targetName: string | null;
-  params?: QueryParams;
-  reasoning: string;
-  raw?: string;
-}
-
 async function parseQueryIntent(query: string): Promise<ParsedQuery> {
   const res = await fetch("/api/parse-query", {
     method: "POST",
@@ -110,181 +48,6 @@ async function parseQueryIntent(query: string): Promise<ParsedQuery> {
   });
   if (!res.ok) throw new Error(`parse-query API ${res.status}`);
   return res.json() as Promise<ParsedQuery>;
-}
-
-const urgencyOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
-
-// CRM 연동이 필요한 intent (mock 데이터로 필터 불가)
-const CRM_REQUIRED_INTENTS = new Set<QueryIntent>([
-  "no_product", "has_claim", "prospect", "transferred",
-]);
-
-// CSV 데이터 조회 intent
-const CSV_DATA_INTENTS = new Set<QueryIntent>([
-  "fp_list", "fp_customers", "my_customers",
-  "csv_gender_filter", "csv_age_filter", "workplace_search", "marketing_consent", "csv_birth_month",
-  "product_ranking", "product_list",
-  "customer_coverage", "expiry_coverage", "product_search", "coverage_search",
-]);
-
-const PRODUCT_TYPE_LABEL: Record<string, string> = {
-  cancer: "암보험",
-  loss_ins: "실손보험",
-  driver: "운전자보험",
-  dementia: "치매보험",
-  child: "자녀보험",
-};
-
-function filterByIntent(customers: Customer[], intent: QueryIntent, targetName: string | null, query: string, params: QueryParams = {}): Customer[] {
-  switch (intent) {
-    case "birthday":
-      return customers.filter((c) => c.event === "본인 생일");
-
-    case "birth_month": {
-      const month = params.month ?? new Date().getMonth() + 1;
-      return customers.filter((c) => {
-        const m = parseInt(c.birthDate.split("-")[1], 10);
-        return m === month;
-      }).sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
-    }
-
-    case "expiry":
-      return customers.filter(
-        (c) =>
-          c.event === "자동차 만기 도래" ||
-          c.event === "장기 만기 도래" ||
-          c.event === "장기 갱신"
-      );
-
-    case "expiry_months": {
-      const months = params.months ?? 3;
-      const cutoff = new Date();
-      cutoff.setMonth(cutoff.getMonth() + months);
-      // daily_touch 데이터에는 products가 없으므로 eventDate 기반으로 필터
-      return customers.filter((c) => {
-        if (c.eventDate) {
-          const date = new Date(c.eventDate);
-          return date <= cutoff && date >= new Date();
-        }
-        return c.event === "자동차 만기 도래" || c.event === "장기 만기 도래" || c.event === "장기 갱신";
-      }).sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
-    }
-
-    case "overdue":
-      return customers.filter(
-        (c) => c.event === "장기 연체(미납)" || c.event === "장기 자동이체 미인출"
-      );
-
-    case "thankyou":
-      return customers.filter((c) => c.event === "장기 체결 감사");
-
-    case "untouched":
-      return customers.filter((c) => c.event === "미터치고객" || c.event === "장기 미터치 이관고객 안내");
-
-    case "low_coverage":
-      return customers.filter((c) => c.event === "주요담보 저가입고객 안내" || c.event === "담보 부족고객");
-
-    case "plan_expiry":
-      return customers.filter((c) => c.event === "가입설계동의 만료");
-
-    case "gender_filter": {
-      const g = params.gender;
-      if (!g) return [...customers].sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
-      return customers.filter((c) => c.gender === g)
-        .sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
-    }
-
-    case "age_filter": {
-      const min = params.ageMin ?? 0;
-      const max = params.ageMax ?? 999;
-      return customers.filter((c) => c.age >= min && c.age <= max)
-        .sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
-    }
-
-    case "insurance_type": {
-      const t = params.insuranceType;
-      if (t === "car")
-        return customers.filter((c) => c.carCount > 0)
-          .sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
-      if (t === "long_term")
-        return customers.filter((c) => c.longTermCount > 0)
-          .sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
-      if (t === "general")
-        return [];
-      return [...customers].sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
-    }
-
-    case "urgency_filter": {
-      const u = params.urgency;
-      if (!u) return [...customers].sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
-      return customers.filter((c) => c.urgency === u);
-    }
-
-    case "name_search": {
-      const name = targetName ?? query;
-      const nameMatches = customers.filter((c) => c.name.includes(name));
-      if (nameMatches.length > 0) return nameMatches;
-      return [...customers].sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
-    }
-
-    // CRM 연동 필요 — 빈 배열 반환 (핸들러에서 별도 처리)
-    case "no_product":
-    case "has_claim":
-    case "prospect":
-    case "transferred":
-      return [];
-
-    case "all":
-    default:
-      return [...customers].sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
-  }
-}
-
-function getCrmRequiredMessage(intent: QueryIntent, params: QueryParams): string {
-  if (intent === "no_product") {
-    const label = PRODUCT_TYPE_LABEL[params.productType ?? ""] ?? params.productType ?? "해당 상품";
-    return `${label} 미가입 고객 조회는 CRM 담보특성 데이터와 연동이 필요합니다.\n실제 시스템에서는 SFA_CTM_INFO_CVR_CND 테이블 기반으로 조회됩니다.`;
-  }
-  if (intent === "has_claim") return "사고이력 고객 조회는 CRM 계약특성 데이터(사고건수 CLMCT)와 연동이 필요합니다.";
-  if (intent === "prospect") return "가망고객 조회는 CRM 고객특성 데이터(BZ_FMLCU_FLGCD='90')와 연동이 필요합니다.";
-  if (intent === "transferred") return "이관고객 조회는 CRM 고객특성 데이터(TA_CTM_YN='1')와 연동이 필요합니다.";
-  return "해당 조회는 CRM 연동이 필요합니다.";
-}
-
-function getBotText(intent: QueryIntent, params: QueryParams, count: number): string {
-  switch (intent) {
-    case "birthday": return `오늘 생일인 고객 ${count}명이 있습니다. 따뜻한 생일 메시지를 보내드리세요!`;
-    case "birth_month": {
-      const m = params.month ?? new Date().getMonth() + 1;
-      return `${m}월 생일 고객 ${count}명입니다. 생일 축하 메시지로 관계를 강화하세요!`;
-    }
-    case "expiry": return `만기 도래 및 갱신 예정 고객 ${count}명을 찾았습니다. 각 고객의 계약 현황을 확인하고 연락해보세요.`;
-    case "expiry_months": return `${params.months ?? 3}개월 이내 만기 도래 고객 ${count}명입니다. 만기일 순으로 정렬되었습니다.`;
-    case "overdue": return `연체 및 자동이체 미인출 고객 ${count}명입니다. 빠른 연락이 필요합니다.`;
-    case "thankyou": return `체결 감사 안내 대상 고객 ${count}명입니다. 감사 인사로 관계를 강화하세요.`;
-    case "untouched": return `장기 미접촉 고객 ${count}명입니다. 관계 재구축이 필요합니다.`;
-    case "low_coverage": return `주요담보 저가입 고객 ${count}명입니다. 담보 보강 제안을 검토하세요.`;
-    case "plan_expiry": return `가입설계 동의 만료 예정 고객 ${count}명입니다. 동의 연장 안내가 필요합니다.`;
-    case "gender_filter": return `${params.gender ?? "해당"} 고객 ${count}명입니다. 긴급도 순으로 정렬되었습니다.`;
-    case "age_filter": {
-      const label = params.ageMax ? `${params.ageMin}~${params.ageMax}세` : `${params.ageMin}세 이상`;
-      return `${label} 고객 ${count}명입니다.`;
-    }
-    case "insurance_type": {
-      const typeLabel: Record<string, string> = { car: "자동차보험", long_term: "장기보험", general: "일반보험(GA)" };
-      const label = typeLabel[params.insuranceType ?? ""] ?? "보험";
-      if (params.insuranceType === "general" && count === 0)
-        return `일반보험(GA) 고객 조회는 CRM 연동이 필요합니다. 현재 데모 데이터에는 일반보험 고객이 포함되어 있지 않습니다.`;
-      return `${label} 가입 고객 ${count}명입니다.`;
-    }
-    case "urgency_filter": {
-      const labels: Record<string, string> = { urgent: "긴급", high: "높음", normal: "보통", low: "낮음" };
-      return `긴급도 [${labels[params.urgency ?? ""] ?? params.urgency}] 고객 ${count}명입니다.`;
-    }
-    case "name_search": return `검색 결과 ${count}명의 고객을 찾았습니다.`;
-    case "all": return `오늘 터치가 필요한 고객 ${count}명을 확인했습니다. 긴급도 순으로 정렬되었습니다.`;
-    default: return `고객 ${count}명을 찾았습니다.`;
-  }
 }
 
 function makeId() {
@@ -316,11 +79,44 @@ interface ChatWindowProps {
   fpProfile: FPProfile;
 }
 
+// Read saved chat state from sessionStorage (called once during component init)
+function readSavedChatState(employeeId: string) {
+  try {
+    const raw = sessionStorage.getItem(CHAT_STATE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (saved.employeeId === employeeId && saved.messages?.length > 1) {
+        return {
+          messages: saved.messages.map((m: ChatMessage & { timestamp: string }) => ({
+            ...m,
+            timestamp: new Date(m.timestamp),
+          })) as ChatMessage[],
+          touchCustomers: (saved.touchCustomers ?? []) as Customer[],
+          sentCustomerIds: (saved.sentCustomerIds ?? []) as string[],
+        };
+      }
+    }
+  } catch {}
+  return null;
+}
+
 export default function ChatWindow({ fpProfile }: ChatWindowProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    createGreetingMessage(fpProfile),
-  ]);
-  const [touchCustomers, setTouchCustomers] = useState<Customer[]>([]);
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Parse sessionStorage once on first render for state initialization
+  const restoredRef = useRef<ReturnType<typeof readSavedChatState> | undefined>(undefined);
+  const lastAppliedGuideQueryRef = useRef<string | null>(null);
+  if (restoredRef.current === undefined) {
+    restoredRef.current = readSavedChatState(fpProfile.employeeId);
+  }
+
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    restoredRef.current?.messages ?? [createGreetingMessage(fpProfile)]
+  );
+  const [touchCustomers, setTouchCustomers] = useState<Customer[]>(
+    () => restoredRef.current?.touchCustomers ?? []
+  );
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -328,7 +124,9 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
   const [selectedCustomerForModal, setSelectedCustomerForModal] =
     useState<Customer | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [sentCustomerIds, setSentCustomerIds] = useState<Set<string>>(new Set());
+  const [sentCustomerIds, setSentCustomerIds] = useState<Set<string>>(
+    () => new Set(restoredRef.current?.sentCustomerIds ?? [])
+  );
   const [toast, setToast] = useState<{ show: boolean; msg: string }>({
     show: false,
     msg: "",
@@ -345,14 +143,20 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isTyping, scrollToBottom]);
+  }, [messages, scrollToBottom]);
 
   useEffect(() => {
-    setInputValue("");
+    // Chat state was already restored from sessionStorage in useState initializers
+    if (restoredRef.current) {
+      return;
+    }
+
+    // Normal initialization (first login or no saved state)
     setIsTyping(false);
     setIsGenerating(false);
     setSentCustomerIds(new Set());
     setMessages([createGreetingMessage(fpProfile)]);
+    setInputValue("");
 
     // FP 로그인 시 daily_touch 데이터 자동 로드 + 표시
     const loadDailyTouch = async () => {
@@ -394,6 +198,58 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
 
     loadDailyTouch();
   }, [fpProfile]);
+
+  useEffect(() => {
+    const guideQueryFromUrl = searchParams.get("guideQuery");
+    let pendingGuideQuery = guideQueryFromUrl;
+
+    if (!pendingGuideQuery) {
+      try {
+        pendingGuideQuery = sessionStorage.getItem(GUIDE_QUERY_KEY);
+      } catch {}
+    }
+
+    if (!pendingGuideQuery) {
+      lastAppliedGuideQueryRef.current = null;
+      return;
+    }
+
+    if (lastAppliedGuideQueryRef.current === pendingGuideQuery) {
+      return;
+    }
+
+    lastAppliedGuideQueryRef.current = pendingGuideQuery;
+    setInputValue(pendingGuideQuery);
+    requestAnimationFrame(() => inputRef.current?.focus());
+
+    try {
+      sessionStorage.removeItem(GUIDE_QUERY_KEY);
+    } catch {}
+
+    if (guideQueryFromUrl) {
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.delete("guideQuery");
+      const nextUrl = nextParams.toString()
+        ? `${pathname}?${nextParams.toString()}`
+        : pathname;
+      router.replace(nextUrl, { scroll: false });
+    }
+  }, [pathname, router, searchParams]);
+
+  // Persist chat state to sessionStorage for tab navigation preservation
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        CHAT_STATE_KEY,
+        JSON.stringify({
+          employeeId: fpProfile.employeeId,
+          messages,
+          touchCustomers,
+          sentCustomerIds: Array.from(sentCustomerIds),
+        })
+      );
+    } catch {}
+  }, [messages, touchCustomers, sentCustomerIds, fpProfile.employeeId]);
 
   const showToastMsg = (msg: string) => {
     setToast({ show: true, msg });
@@ -494,6 +350,46 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
             role: "bot",
             type: "text",
             content: "데이터 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+          });
+        }
+        return;
+      }
+
+      // 실손의료비 약관/보상 기준 질의
+      if (parsed.intent === "silson_search") {
+        try {
+          setIsTyping(true);
+          const silsonRes = await fetch("/api/silson-search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, topk: 5 }),
+          });
+          setIsTyping(false);
+          if (!silsonRes.ok) throw new Error(`silson-search ${silsonRes.status}`);
+          const silsonData = await silsonRes.json() as SilsonSearchResponse;
+          const cards = buildSilsonCards(query, silsonData);
+
+          for (let i = 0; i < cards.length; i += 1) {
+            setIsTyping(true);
+            await sleep(i === 0 ? 420 : 760);
+            setIsTyping(false);
+            addBotMessage({
+              role: "bot",
+              type: "silson-card",
+              title: cards[i].title,
+              badge: cards[i].badge,
+              tone: cards[i].tone,
+              content: cards[i].content,
+              sources: cards[i].sources,
+              followUps: cards[i].followUps,
+            });
+          }
+        } catch {
+          setIsTyping(false);
+          addBotMessage({
+            role: "bot",
+            type: "text",
+            content: "실손의료비 정보 조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
           });
         }
         return;
@@ -643,6 +539,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
   };
 
   const busy = isTyping || isGenerating;
+  const showQuickScrollHint = QUICK_ACTIONS.length > 4;
 
   return (
     <main className="flex-1 flex flex-col min-w-0 bg-surface-secondary relative overflow-hidden">
@@ -663,6 +560,8 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
+            role="status"
+            aria-live="polite"
             className="absolute top-0 left-0 right-0 z-20 flex items-center justify-center gap-2 py-2 text-xs font-medium text-white/90"
             style={{ background: "linear-gradient(90deg, #1A2B4A 0%, #2D4168 50%, #1A2B4A 100%)" }}
           >
@@ -685,6 +584,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
               message={msg}
               onCustomerSelect={handleCustomerSelect}
               onLMSSelect={handleLMSSelect}
+              onFollowUpClick={handleUserInput}
               sentCustomerIds={sentCustomerIds}
             />
           ))}
@@ -699,24 +599,33 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
       <div className="shrink-0 bg-white border-t border-gray-100 px-3 sm:px-4 md:px-6 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:py-4 relative z-10">
         <div className="max-w-3xl mx-auto">
           {/* Quick chips */}
-          <div className="no-scrollbar flex gap-2 mb-3 overflow-x-auto pb-1 -mx-1 px-1 sm:mx-0 sm:px-0 sm:pb-0">
-            {QUICK_ACTIONS.map((action) => (
-              <motion.button
-                key={action.label}
-                whileHover={{ scale: 1.03, y: -1 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => handleUserInput(action.query)}
-                disabled={busy}
-                className="shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium border border-orange-200 bg-orange-50 text-hanwha-orange hover:bg-orange-100 hover:border-orange-300 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {action.label}
-              </motion.button>
-            ))}
+          {showQuickScrollHint && (
+            <div className="mb-2 flex items-center justify-between px-1 text-[11px] text-gray-400 sm:hidden">
+              <span>빠른 실행</span>
+              <span>좌우로 더 보기</span>
+            </div>
+          )}
+          <div className="relative mb-3">
+            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 sm:mx-0 sm:px-0 sm:pb-0">
+              {QUICK_ACTIONS.map((action) => (
+                <button
+                  key={action.label}
+                  onClick={() => handleUserInput(action.query)}
+                  disabled={busy}
+                  className="shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium border border-orange-200 bg-orange-50 text-hanwha-orange hover:bg-orange-100 hover:border-orange-300 active:scale-95 transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+            {showQuickScrollHint && (
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white via-white/85 to-transparent sm:hidden" />
+            )}
           </div>
 
           {/* Input form */}
           <form onSubmit={handleSubmit} className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl sm:rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 focus-within:border-hanwha-orange focus-within:bg-white transition-all duration-200 shadow-sm">
+            <div className="flex-1 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl sm:rounded-2xl px-3 sm:px-4 h-10 sm:h-12 focus-within:border-hanwha-orange focus-within:bg-white transition-colors duration-200 shadow-sm">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" className="shrink-0">
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -726,12 +635,17 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="고객명 또는 이벤트 유형을 검색하세요..."
+                placeholder="고객명, 이벤트 유형 또는 실손 내용을 검색하세요..."
                 disabled={busy}
                 className="flex-1 bg-transparent text-[13px] sm:text-sm text-hanwha-navy placeholder-gray-400 outline-none disabled:opacity-50"
               />
               {inputValue && (
-                <button type="button" onClick={() => setInputValue("")} className="text-gray-400 hover:text-gray-600 transition-colors text-base sm:text-lg leading-none">
+                <button
+                  type="button"
+                  onClick={() => setInputValue("")}
+                  aria-label="입력 지우기"
+                  className="text-gray-400 hover:text-gray-600 transition-colors text-base sm:text-lg leading-none"
+                >
                   ×
                 </button>
               )}

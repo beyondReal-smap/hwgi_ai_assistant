@@ -29,21 +29,18 @@ export default function JobcodeResultsPanel({ response, isSearching, error }: Pr
 
   if (isSearching) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center gap-3 text-gray-400">
-          <svg className="animate-spin h-8 w-8 text-hanwha-orange" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-          <p className="text-sm">검색 및 추천 수행 중...</p>
+      <section className="flex h-full min-h-0 flex-1 flex-col bg-[linear-gradient(180deg,#F8FAFD_0%,#F2F6FB_100%)]">
+        <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-5 sm:py-6">
+          <LoadingPanel />
         </div>
-      </div>
+      </section>
     );
   }
 
   if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50 p-8">
+      <section className="flex h-full min-h-0 flex-1 flex-col bg-[linear-gradient(180deg,#F8FAFD_0%,#F2F6FB_100%)]">
+        <div className="flex flex-1 items-center justify-center p-8">
         <div className="bg-red-50 border border-red-200 rounded-xl p-5 max-w-md w-full">
           <div className="flex items-start gap-3">
             <svg className="w-5 h-5 text-red-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -57,13 +54,15 @@ export default function JobcodeResultsPanel({ response, isSearching, error }: Pr
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      </section>
     );
   }
 
   if (!response) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
+      <section className="flex h-full min-h-0 flex-1 flex-col bg-[linear-gradient(180deg,#F8FAFD_0%,#F2F6FB_100%)]">
+        <div className="flex flex-1 items-center justify-center px-6 py-10">
         <div className="text-center text-gray-400 max-w-xs">
           <svg className="w-12 h-12 mx-auto mb-3 opacity-40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <circle cx="11" cy="11" r="8" />
@@ -72,103 +71,85 @@ export default function JobcodeResultsPanel({ response, isSearching, error }: Pr
           <p className="text-sm font-medium">직업 설명을 입력하고</p>
           <p className="text-sm">"후보 검색"을 눌러 추천을 받으세요.</p>
         </div>
-      </div>
+        </div>
+      </section>
     );
   }
 
-  const { recs, mode, score_threshold, filtered_out_count, prefilter_count } = response;
+  const { recs } = response;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 p-5 flex flex-col gap-5">
-      {/* Mode info bar */}
-      <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 shadow-sm">
-        <span>
-          <span className="font-medium text-gray-700">검색:</span> {mode.retrieval}
-        </span>
-        <span>
-          <span className="font-medium text-gray-700">재랭크:</span> {mode.rerank}
-        </span>
-        <span>
-          <span className="font-medium text-gray-700">Embed:</span> {mode.embed_status}
-        </span>
-        <span>
-          <span className="font-medium text-gray-700">CE:</span> {mode.ce_status}
-        </span>
-        {mode.llm_status && mode.llm_status !== "disabled" && (
-          <span className={mode.llm_status === "real" ? "text-emerald-600 font-semibold" : "text-amber-600"}>
-            <span className="font-medium">GPT:</span>{" "}
-            {mode.llm_status === "real" ? "✓ 재랭크 적용" : "mock"}
-          </span>
-        )}
-        <span>
-          <span className="font-medium text-gray-700">임계치:</span> {score_threshold.toFixed(2)}
-        </span>
-        {filtered_out_count > 0 && (
-          <span className="text-amber-600">
-            {prefilter_count}개 중 {filtered_out_count}개 임계치 미달 제외
-          </span>
-        )}
-      </div>
-
-      {recs.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-gray-400 text-sm">추천 결과가 없습니다. 임계치를 낮추거나 다른 설명을 입력해 주세요.</p>
-        </div>
-      ) : (
-        <>
-          {/* Recommendation cards */}
-          <div>
-            <h3 className="text-hanwha-navy font-semibold text-sm mb-3">
-              추천 Top{recs.length}
-            </h3>
-            <div className="flex flex-col gap-2">
-              {recs.map((rec) => {
-                const gs = gradeStyle(rec.risk_grade);
-                const isSelected = selectedRec?.rank === rec.rank;
-                return (
-                  <button
-                    key={rec.rank}
-                    onClick={() => setSelectedRec(isSelected ? null : rec)}
-                    className={`text-left w-full bg-white border rounded-xl px-4 py-3 shadow-sm transition-all
-                      ${isSelected
-                        ? "border-hanwha-orange ring-1 ring-hanwha-orange"
-                        : "border-gray-200 hover:border-gray-300 hover:shadow-md"
-                      }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="shrink-0 w-6 h-6 rounded-full bg-hanwha-navy text-white text-xs font-bold flex items-center justify-center">
-                          {rec.rank}
-                        </span>
-                        <div className="min-w-0">
-                          <span className="font-mono text-xs text-gray-400 mr-1">{rec.job_code}</span>
-                          <span className="font-semibold text-sm text-hanwha-navy">{rec.job_name}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span
-                          className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${gs.bg} ${gs.text} ${gs.border}`}
-                        >
-                          {rec.risk_grade}급
-                        </span>
-                        <span className="text-xs font-mono text-gray-500">
-                          {rec.final_score.toFixed(4)}
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
+    <section className="flex h-full min-h-0 flex-1 flex-col bg-[linear-gradient(180deg,#F8FAFD_0%,#F2F6FB_100%)]">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-5 sm:py-6">
+        <div className="flex flex-col gap-5 pb-8">
+          {recs.length === 0 ? (
+            <div className="flex min-h-[240px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white/70 text-center">
+              <p className="px-6 text-sm text-slate-400">
+                추천 결과가 없습니다. 임계치를 낮추거나 설명을 조금 더 구체적으로 입력해 주세요.
+              </p>
             </div>
-          </div>
+          ) : (
+            <>
+              {/* Recommendation cards */}
+              <div>
+                <h3 className="mb-3 text-sm font-semibold text-hanwha-navy">
+                  추천 Top{recs.length}
+                </h3>
+                <div className="flex flex-col gap-2.5">
+                  {recs.map((rec) => {
+                    const gs = gradeStyle(rec.risk_grade);
+                    const isSelected = selectedRec?.rank === rec.rank;
+                    return (
+                      <button
+                        key={rec.rank}
+                        onClick={() => setSelectedRec(isSelected ? null : rec)}
+                        className={`w-full rounded-2xl border px-4 py-3.5 text-left transition-all ${
+                          isSelected
+                            ? "border-hanwha-orange bg-white shadow-[0_12px_28px_rgba(243,115,33,0.14)] ring-1 ring-hanwha-orange/30"
+                            : "border-slate-200 bg-white/92 shadow-sm hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-start gap-3">
+                            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-hanwha-navy text-xs font-bold text-white">
+                              {rec.rank}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <span className="font-mono text-[11px] text-slate-400">{rec.job_code}</span>
+                                <span className="text-sm font-semibold text-hanwha-navy">{rec.job_name}</span>
+                              </div>
+                              <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">
+                                {rec.reason}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${gs.bg} ${gs.text} ${gs.border}`}
+                            >
+                              {rec.risk_grade}급
+                            </span>
+                            <span className="text-[11px] font-mono text-slate-400">
+                              {rec.final_score.toFixed(4)}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-          {/* Detail viewer */}
-          {selectedRec && (
-            <DetailViewer rec={selectedRec} onClose={() => setSelectedRec(null)} />
+              {/* Detail viewer */}
+              {selectedRec && (
+                <DetailViewer rec={selectedRec} onClose={() => setSelectedRec(null)} />
+              )}
+            </>
           )}
-        </>
-      )}
-    </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -276,6 +257,85 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div className="flex flex-col gap-1.5">
       <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{title}</h4>
       {children}
+    </div>
+  );
+}
+
+function LoadingPanel() {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white/90 shadow-sm backdrop-blur">
+        <div className="border-b border-slate-100 px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+            Jobcode Matching
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-hanwha-navy">
+            직업 특징을 분석하고 후보를 정리하고 있어요
+          </h2>
+          <p className="mt-1 text-sm leading-relaxed text-slate-500">
+            입력한 설명에서 핵심 업무, 위험 키워드, 유사 직무를 차례로 비교하는 중입니다.
+          </p>
+        </div>
+
+        <div className="space-y-4 px-5 py-5">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-slate-600">후보를 탐색하는 중</p>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  잠시 후 추천 결과를 정리해서 보여드립니다.
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-slate-300 animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-slate-400 animate-pulse [animation-delay:180ms]" />
+                <span className="h-2 w-2 rounded-full bg-slate-500 animate-pulse [animation-delay:360ms]" />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-3">
+            {["직무 해석", "유사군 탐색", "추천 정렬"].map((label, index) => (
+              <div
+                key={label}
+                className="rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3"
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-600 shadow-sm">
+                    {index + 1}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-600">{label}</span>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="h-2 rounded-full bg-slate-200/80 animate-pulse" />
+                  <div className="h-2 w-4/5 rounded-full bg-slate-200/60 animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2.5">
+        {[1, 2, 3].map((row) => (
+          <div
+            key={row}
+            className="rounded-2xl border border-slate-200/80 bg-white/85 px-4 py-4 shadow-sm"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="mt-0.5 h-7 w-7 rounded-full bg-slate-200 animate-pulse" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="h-3 w-28 rounded-full bg-slate-200 animate-pulse" />
+                  <div className="h-3 w-44 max-w-full rounded-full bg-slate-100 animate-pulse" />
+                  <div className="h-3 w-full rounded-full bg-slate-100 animate-pulse" />
+                </div>
+              </div>
+              <div className="h-6 w-14 rounded-full bg-slate-100 animate-pulse" />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

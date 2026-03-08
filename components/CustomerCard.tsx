@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import type { Customer } from "@/lib/types";
 
@@ -51,7 +52,7 @@ interface CustomerCardProps {
   isSent?: boolean;
 }
 
-export default function CustomerCard({ customer, onSelect, index, isSent = false }: CustomerCardProps) {
+const CustomerCard = memo(function CustomerCard({ customer, onSelect, index, isSent = false }: CustomerCardProps) {
   const event = eventColors[customer.event] ?? {
     bg: "#F8FAFC",
     text: "#64748B",
@@ -66,8 +67,11 @@ export default function CustomerCard({ customer, onSelect, index, isSent = false
       transition={{ duration: 0.3, delay: index * 0.07 }}
       whileHover={{ y: -3, boxShadow: "0 8px 24px 0 rgba(26, 43, 74, 0.14)" }}
       whileTap={{ scale: 0.98 }}
+      role="button"
+      tabIndex={0}
       onClick={() => onSelect(customer)}
-      className={`bg-white rounded-2xl p-4 cursor-pointer shadow-card transition-all duration-200 border relative overflow-hidden ${isSent ? "pt-7" : ""}`}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(customer); } }}
+      className={`bg-white rounded-2xl p-4 cursor-pointer shadow-card transition-all duration-200 border relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-hanwha-orange/50 ${isSent ? "pt-7" : ""}`}
       style={{
         width: "clamp(196px, 72vw, 260px)",
         borderColor: isSent ? "#86EFAC" : "#F3F4F6",
@@ -185,7 +189,9 @@ export default function CustomerCard({ customer, onSelect, index, isSent = false
       </div>
     </motion.div>
   );
-}
+});
+
+export default CustomerCard;
 
 function EventIcon({ eventType, color }: { eventType: string; color: string }) {
   const iconProps = {
