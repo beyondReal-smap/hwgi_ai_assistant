@@ -1,39 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import type { ChatMessage, Customer, LMSMessage, SilsonCardTone } from "@/lib/types";
+import type { ChatMessage, Customer, LMSMessage } from "@/lib/types";
 import CustomerCard from "./CustomerCard";
 import LMSMessageCard from "./LMSMessageCard";
 import PaginatedTable from "./PaginatedTable";
 
-const SILSON_CARD_STYLES: Record<SilsonCardTone, { shell: string; badge: string; title: string }> = {
-  intro: {
-    shell: "border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-gray-50",
-    badge: "bg-slate-900 text-white",
-    title: "text-slate-900",
-  },
-  answer: {
-    shell: "border border-orange-200 bg-gradient-to-br from-white via-orange-50/70 to-amber-50/90",
-    badge: "bg-hanwha-orange text-white",
-    title: "text-hanwha-navy",
-  },
-  detail: {
-    shell: "border border-blue-200 bg-gradient-to-br from-white via-sky-50/70 to-blue-50/90",
-    badge: "bg-[#1A2B4A] text-white",
-    title: "text-hanwha-navy",
-  },
-  warning: {
-    shell: "border border-amber-200 bg-gradient-to-br from-white via-amber-50/70 to-yellow-50/90",
-    badge: "bg-amber-500 text-white",
-    title: "text-amber-950",
-  },
-  sources: {
-    shell: "border border-emerald-200 bg-gradient-to-br from-white via-emerald-50/70 to-teal-50/90",
-    badge: "bg-emerald-600 text-white",
-    title: "text-emerald-950",
-  },
-};
 
 function normalizeInlineMarkdown(text: string) {
   return text
@@ -63,173 +36,92 @@ function parseTableLines(lines: string[], startIdx: number): { headers: string[]
   return { headers, rows, endIdx: i };
 }
 
-/** Normalize a line for dedup comparison */
-function normForDedup(s: string): string {
-  return s
-    .replace(/[✅📌📋🔹🔸👉🔎\s\uFE0F\u20E3①②③④⑤⑥⑦⑧⑨⑩]+/gu, "")
-    .replace(/^[\d.()]+/, "")
-    .trim();
-}
-
+/** Render silson card body — ChatGPT-style unified sections */
 function renderSilsonCardBody(content: string) {
-  const rawLines = normalizeInlineMarkdown(content).split("\n");
-  // Keep empty lines for table detection (tables need contiguous pipe rows)
-  const lines = rawLines.map((line) => line.trim());
-
-  // Group lines into: metadata block, then sections (header + body lines)
-  const metaLines: string[] = [];
-  const sections: Array<{ header: string; lines: string[] }> = [];
-  let currentSection: { header: string; lines: string[] } | null = null;
-  const seenHeaders = new Set<string>();
-
-  const SECTION_RE = /^[✅📌📋🔹🔸👉🔎]*\s*(핵심\s*답변|추가\s*안내|참고\s*사항|주의\s*사항|결론|요약|보상\s*기준|면책\s*사항|정리|[①②③④⑤].+)$/;
-  const META_RE = /^(질문|가입시기|세대|상품명|보험종류)\s*[:：]\s*/;
-  // Subsection headers like "① 구계약 (판매시기: ~ 2003.09)"
-  const SUBSECTION_RE = /^[①②③④⑤⑥⑦⑧⑨⑩]\s+.+$/;
-  const seenBodyLines = new Set<string>();
+  const lines = normalizeInlineMarkdown(content).split("\n").map((l) => l.trim());
+  const elements: React.ReactNode[] = [];
+  const EMOJI_SECTION_RE = /^(💡|📝|✅|⚠️|📌|🔍|📋)\s+(.+)$/;
+  const META_TAG_RE = /^🏷️\s+(.+)$/;
 
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
     if (!line) { i++; continue; }
 
-    if (META_RE.test(line)) {
-      metaLines.push(line);
+    // Meta tag pills (🏷️ 세대: 4세대 | 가입시기: ...)
+    const metaMatch = line.match(META_TAG_RE);
+    if (metaMatch) {
+      const tags = metaMatch[1].split("|").map((t) => t.trim()).filter(Boolean);
+      elements.push(
+        <div key={`meta-${i}`} className="flex flex-wrap gap-1.5 mb-1">
+          {tags.map((tag, ti) => (
+            <span key={ti} className="inline-flex items-center rounded-full bg-black/[0.04] px-2.5 py-0.5 text-[11px] text-gray-500 font-medium">
+              {tag}
+            </span>
+          ))}
+        </div>,
+      );
       i++;
-    } else if (SECTION_RE.test(line) || SUBSECTION_RE.test(line)) {
-      const normKey = normForDedup(line);
-      // Skip duplicate section headers
-      if (seenHeaders.has(normKey)) { i++; continue; }
-      seenHeaders.add(normKey);
-      if (currentSection) sections.push(currentSection);
-      currentSection = { header: line, lines: [] };
+      continue;
+    }
+
+    // Emoji section header (💡 핵심 요약, 📝 상세 설명, etc.)
+    const secMatch = line.match(EMOJI_SECTION_RE);
+    if (secMatch) {
+      elements.push(
+        <div key={`sh-${i}`} className="flex items-center gap-2 mt-3 first:mt-0 mb-1">
+          <span className="text-sm leading-none">{secMatch[1]}</span>
+          <span className="text-[13px] sm:text-[14px] font-bold text-hanwha-navy">{secMatch[2]}</span>
+          <span className="flex-1 h-px bg-gradient-to-r from-gray-200 to-transparent" />
+        </div>,
+      );
       i++;
-    } else if (line.startsWith("|")) {
-      // Table detected — consume all contiguous table lines
+      continue;
+    }
+
+    // Table (pipe lines)
+    if (line.startsWith("|")) {
       const table = parseTableLines(lines, i);
       if (table) {
-        if (!currentSection) currentSection = { header: "", lines: [] };
-        // Encode table as special marker for rendering
-        currentSection.lines.push(`__TABLE__${JSON.stringify({ headers: table.headers, rows: table.rows })}`);
+        elements.push(<PaginatedTable key={`tbl-${i}`} headers={table.headers} rows={table.rows} />);
         i = table.endIdx;
-      } else {
-        if (!currentSection) currentSection = { header: "", lines: [] };
-        currentSection.lines.push(line);
-        i++;
+        continue;
       }
-    } else {
-      if (!currentSection) {
-        currentSection = { header: "", lines: [] };
-      }
-      // Dedup: skip line if essentially same as section header
-      if (currentSection.header && currentSection.lines.length === 0) {
-        const normH = normForDedup(currentSection.header);
-        const normL = normForDedup(line);
-        if (normH && normL && (normH === normL || normL.startsWith(normH) || normH.startsWith(normL))) {
-          i++;
-          continue;
-        }
-      }
-      // Dedup: skip duplicate body lines (10+ chars after whitespace removal)
-      const normBody = line.replace(/\s+/g, "");
-      if (normBody.length > 10) {
-        if (seenBodyLines.has(normBody)) { i++; continue; }
-        seenBodyLines.add(normBody);
-      }
-      currentSection.lines.push(line);
-      i++;
     }
-  }
-  if (currentSection) sections.push(currentSection);
 
-  // Merge consecutive sections with same header
-  const merged: typeof sections = [];
-  for (const sec of sections) {
-    const prev = merged[merged.length - 1];
-    if (prev && sec.header === prev.header && sec.header !== "") {
-      prev.lines.push(...sec.lines);
-    } else {
-      merged.push({ ...sec, lines: [...sec.lines] });
-    }
-  }
-
-  const elements: React.ReactNode[] = [];
-
-  // Metadata block
-  if (metaLines.length > 0) {
-    elements.push(
-      <div key="meta" className="flex flex-wrap gap-x-3 gap-y-1 rounded-xl bg-white/60 px-3 py-2 mb-1">
-        {metaLines.map((ml, i) => {
-          const colonIdx = ml.search(/[:：]/);
-          const label = ml.slice(0, colonIdx).trim();
-          const value = ml.slice(colonIdx + 1).trim();
-          return (
-            <span key={i} className="text-[11px] sm:text-[12px] text-gray-500">
-              <span className="font-medium text-gray-600">{label}</span>
-              <span className="mx-1 text-gray-300">|</span>
-              <span className="text-hanwha-navy font-medium">{value}</span>
-            </span>
-          );
-        })}
-      </div>
-    );
-  }
-
-  // Render sections
-  merged.forEach((sec, sIdx) => {
-    if (sec.header) {
+    // Bullet point
+    if (/^[-•]\s+/.test(line)) {
       elements.push(
-        <div key={`h-${sIdx}`} className="flex items-center gap-2 mt-2 first:mt-0">
-          <span className="h-1 w-1 rounded-full bg-hanwha-orange shrink-0" />
-          <span className="text-[13px] sm:text-[14px] font-bold text-hanwha-navy tracking-wide">
-            {sec.header.replace(/^[✅📌📋🔹🔸👉🔎]+\s*/, "")}
+        <div key={`bl-${i}`} className="flex items-start gap-2 py-0.5">
+          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-hanwha-orange/60" />
+          <span className="text-[12px] sm:text-[13px] leading-relaxed text-gray-700">
+            {line.replace(/^[-•]\s+/, "")}
           </span>
-          <span className="flex-1 h-px bg-gradient-to-r from-gray-200 to-transparent" />
-        </div>
+        </div>,
       );
+      i++;
+      continue;
     }
 
-    sec.lines.forEach((line, lIdx) => {
-      const key = `s${sIdx}-l${lIdx}`;
+    // Numbered item
+    if (/^\d+\.\s+/.test(line)) {
+      const m = line.match(/^(\d+\.)\s+(.*)$/);
+      elements.push(
+        <div key={`num-${i}`} className="flex items-start gap-2 py-0.5">
+          <span className="min-w-[1.2rem] text-[12px] font-semibold text-hanwha-orange">{m?.[1]}</span>
+          <span className="text-[12px] sm:text-[13px] leading-relaxed text-gray-700">{m?.[2] ?? line}</span>
+        </div>,
+      );
+      i++;
+      continue;
+    }
 
-      // Embedded table
-      if (line.startsWith("__TABLE__")) {
-        try {
-          const tableData = JSON.parse(line.slice("__TABLE__".length)) as { headers: string[]; rows: string[][] };
-          elements.push(
-            <PaginatedTable key={key} headers={tableData.headers} rows={tableData.rows} />
-          );
-        } catch {
-          // fallback: render as text
-          elements.push(<p key={key} className="text-[12px] sm:text-[13px] leading-relaxed text-gray-700">{line}</p>);
-        }
-        return;
-      }
-
-      if (/^(?:-|\u2022)\s+/.test(line)) {
-        elements.push(
-          <div key={key} className="flex items-start gap-2 rounded-xl bg-white/70 px-3 py-2 text-[12px] sm:text-[13px] text-gray-700">
-            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-hanwha-orange" />
-            <span className="leading-relaxed">{line.replace(/^(?:-|\u2022)\s+/, "")}</span>
-          </div>
-        );
-      } else if (/^\d+\.\s+/.test(line)) {
-        const match = line.match(/^(\d+\.)\s+(.*)$/);
-        elements.push(
-          <div key={key} className="flex items-start gap-2 rounded-xl bg-white/70 px-3 py-2 text-[12px] sm:text-[13px] text-gray-700">
-            <span className="min-w-[1.5rem] font-semibold text-hanwha-navy">{match?.[1]}</span>
-            <span className="leading-relaxed">{match?.[2] ?? line}</span>
-          </div>
-        );
-      } else {
-        elements.push(
-          <p key={key} className="text-[12px] sm:text-[13px] leading-relaxed text-gray-700">
-            {line}
-          </p>
-        );
-      }
-    });
-  });
+    // Regular paragraph
+    elements.push(
+      <p key={`p-${i}`} className="text-[12px] sm:text-[13px] leading-relaxed text-gray-700">{line}</p>,
+    );
+    i++;
+  }
 
   return elements;
 }
@@ -310,6 +202,7 @@ export default function MessageBubble({
 }: MessageBubbleProps) {
   const isBot = message.role === "bot";
   const [formattedTime, setFormattedTime] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setFormattedTime(
@@ -320,36 +213,45 @@ export default function MessageBubble({
     );
   }, [message.timestamp]);
 
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(message.content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [message.content]);
+
+  const showCopyBtn = isBot && (message.type === "text" || message.type === "analysis" || message.type === "data-card");
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.25 }}
-      className={`flex items-end gap-1.5 sm:gap-2 mb-3 sm:mb-4 ${isBot ? "flex-row" : "flex-row-reverse"}`}
+      className={`group flex ${isBot ? "items-start flex-row" : "items-end flex-row-reverse"} gap-1.5 sm:gap-2 mb-3 sm:mb-4`}
     >
       {/* Bot avatar */}
       {isBot && (
         <div
-          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 mb-0.5 bg-white border border-gray-200 shadow-sm"
+          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 shadow-sm"
         >
           <svg
             width="17"
             height="17"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#1A2B4A"
+            stroke="#C2571A"
             strokeWidth="1.8"
             strokeLinecap="round"
             strokeLinejoin="round"
           >
             {/* Antenna */}
             <line x1="12" y1="7" x2="12" y2="3" />
-            <circle cx="12" cy="2.5" r="1" fill="#1A2B4A" stroke="none" />
+            <circle cx="12" cy="2.5" r="1" fill="#C2571A" stroke="none" />
             {/* Head */}
             <rect x="4" y="7" width="16" height="13" rx="2.5" />
             {/* Eyes */}
-            <circle cx="9" cy="12" r="1.5" fill="#1A2B4A" stroke="none" />
-            <circle cx="15" cy="12" r="1.5" fill="#1A2B4A" stroke="none" />
+            <circle cx="9" cy="12" r="1.5" fill="#C2571A" stroke="none" />
+            <circle cx="15" cy="12" r="1.5" fill="#C2571A" stroke="none" />
             {/* Mouth */}
             <path d="M9 16.5 Q12 15 15 16.5" strokeWidth="1.5" />
             {/* Ear ports */}
@@ -359,18 +261,23 @@ export default function MessageBubble({
         </div>
       )}
 
-      <div className={`flex flex-col gap-1 max-w-[88%] sm:max-w-[80%] ${isBot ? "items-start" : "items-end"}`}>
+      <div className={`flex flex-col gap-1 ${isBot ? "max-w-[92%] sm:max-w-[88%] items-start" : "max-w-[88%] sm:max-w-[80%] items-end"}`}>
+        {/* Bot name label */}
+        {isBot && (
+          <span className="text-[11px] font-semibold text-hanwha-navy/60 ml-0.5 mb-0.5">AI 영업비서</span>
+        )}
+
         {/* Main content */}
         {message.type === "text" && (
           <div
-            className={`px-3.5 sm:px-4 py-2.5 rounded-2xl text-[13px] sm:text-sm leading-relaxed whitespace-pre-wrap ${
+            className={`text-[13px] sm:text-sm whitespace-pre-wrap ${
               isBot
-                ? "bg-white text-hanwha-navy border border-gray-100 shadow-sm"
-                : "text-white rounded-br-sm shadow-sm"
+                ? "text-hanwha-navy leading-[1.75] px-3.5 sm:px-4 py-2.5 rounded-2xl border border-gray-100 bg-gradient-to-br from-white to-orange-50/20"
+                : "px-3.5 sm:px-4 py-2.5 rounded-2xl text-white rounded-br-sm shadow-sm leading-relaxed"
             }`}
             style={
               !isBot
-                ? { background: "linear-gradient(135deg, #3D537F 0%, #2D4168 100%)" }
+                ? { background: "linear-gradient(135deg, #2D4168 0%, #1A2B4A 100%)" }
                 : undefined
             }
           >
@@ -380,7 +287,7 @@ export default function MessageBubble({
 
         {/* Analysis card */}
         {message.type === "analysis" && (
-          <div className="px-3.5 sm:px-4 py-3 rounded-2xl shadow-sm border border-blue-100 bg-gradient-to-br from-blue-50/80 to-slate-50/80 max-w-full">
+          <div className="border border-gray-100 bg-gradient-to-br from-white to-orange-50/30 rounded-2xl px-3.5 sm:px-4 py-3 border-l-[3px] border-l-hanwha-orange/50 max-w-full">
             {message.content.split("\n").map((line, i) => {
               const trimmed = line.trim();
               if (!trimmed) return <div key={i} className="h-1.5" />;
@@ -410,112 +317,297 @@ export default function MessageBubble({
           </div>
         )}
 
-        {message.type === "silson-card" && (
-          <div
-            className={`w-full overflow-hidden rounded-[22px] shadow-sm ${SILSON_CARD_STYLES[message.tone ?? "detail"].shell}`}
-          >
-            <div className="flex items-center gap-2 border-b border-black/5 px-4 py-3">
-              {message.badge ? (
+        {/* Data card (CSV query results) */}
+        {message.type === "data-card" && (() => {
+          // Strip first line (title like "📋 박옥경 FP님 담당 고객 (268명)") and extract count
+          const lines = message.content.split("\n");
+          const firstLine = lines[0] ?? "";
+          const countMatch = firstLine.match(/\((\d+)명/);
+          const count = countMatch ? countMatch[1] : null;
+          // Remove first line (title) and any blank lines right after
+          let bodyStart = 1;
+          while (bodyStart < lines.length && !lines[bodyStart].trim()) bodyStart++;
+          const bodyText = lines.slice(bodyStart).join("\n");
+
+          return (
+            <div className="w-full overflow-hidden rounded-2xl bg-white border border-gray-100 shadow-sm">
+              {/* Header */}
+              <div className="flex items-center gap-2.5 px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-orange-50/60 to-white">
+                <span className="text-base leading-none">👥</span>
+                <h4 className="text-[14px] sm:text-[15px] font-bold text-hanwha-navy flex-1">
+                  고객 목록
+                </h4>
+                {count && (
+                  <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold bg-hanwha-orange/10 text-hanwha-orange">
+                    {count}명
+                  </span>
+                )}
+              </div>
+              {/* Body */}
+              <div className="px-4 py-3 text-[13px] sm:text-sm whitespace-pre-wrap text-hanwha-navy leading-[1.75]">
+                {renderTextWithTables(bodyText)}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Customer info card */}
+        {message.type === "customer-info" && message.customerContext && (() => {
+          const c = message.customerContext!;
+          const urgencyMap: Record<string, { label: string; color: string; bg: string }> = {
+            urgent: { label: "긴급", color: "#DC2626", bg: "#FEF2F2" },
+            high:   { label: "높음", color: "#EA580C", bg: "#FFF7ED" },
+            normal: { label: "보통", color: "#2563EB", bg: "#EFF6FF" },
+            low:    { label: "낮음", color: "#16A34A", bg: "#F0FDF4" },
+          };
+          const urg = urgencyMap[c.urgency] ?? urgencyMap.normal;
+          const lastContact = c.lastContact ?? "없음 (미접촉 고객)";
+          return (
+            <div className="w-full overflow-hidden rounded-2xl bg-white border border-gray-100 shadow-sm">
+              {/* Header */}
+              <div className="flex items-center gap-2.5 px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-orange-50/60 to-white">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0"
+                  style={{
+                    background: c.gender === "여"
+                      ? "linear-gradient(135deg, #EC4899, #DB2777)"
+                      : "linear-gradient(135deg, #3B82F6, #2563EB)",
+                  }}
+                >
+                  {c.name.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-[14px] sm:text-[15px] font-bold text-hanwha-navy">
+                    {c.name} 고객 정보
+                  </h4>
+                  <span className="text-[11px] text-gray-400">{c.gender}성 · {c.age}세 · {c.birthDate}</span>
+                </div>
                 <span
-                  className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] uppercase ${SILSON_CARD_STYLES[message.tone ?? "detail"].badge}`}
+                  className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
+                  style={{ background: urg.bg, color: urg.color }}
+                >
+                  {urg.label}
+                </span>
+              </div>
+
+              {/* Body */}
+              <div className="px-4 py-3 flex flex-col gap-2">
+                {/* Event */}
+                <div className="flex items-start gap-2">
+                  <span className="text-sm leading-none mt-0.5">🎯</span>
+                  <div>
+                    <span className="text-[12px] text-gray-400 font-medium">이벤트</span>
+                    <p className="text-[13px] sm:text-sm font-semibold text-hanwha-navy">{c.event}</p>
+                  </div>
+                </div>
+
+                {/* Event detail */}
+                <div className="flex items-start gap-2">
+                  <span className="text-sm leading-none mt-0.5">📌</span>
+                  <p className="text-[12px] sm:text-[13px] text-gray-600 leading-relaxed">{c.eventDetail}</p>
+                </div>
+
+                {/* Products */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm leading-none">📦</span>
+                  {c.products.length > 0 ? (
+                    c.products.map((p, pi) => (
+                      <span key={pi} className="inline-flex items-center rounded-full bg-blue-50 border border-blue-100 px-2.5 py-0.5 text-[11px] text-blue-600 font-medium">
+                        {p.name} ({p.contractNo})
+                      </span>
+                    ))
+                  ) : (
+                    <>
+                      {c.longTermCount > 0 && (
+                        <span className="inline-flex items-center rounded-full bg-blue-50 border border-blue-100 px-2.5 py-0.5 text-[11px] text-blue-600 font-medium">
+                          장기 {c.longTermCount}건
+                        </span>
+                      )}
+                      {c.carCount > 0 && (
+                        <span className="inline-flex items-center rounded-full bg-orange-50 border border-orange-100 px-2.5 py-0.5 text-[11px] text-orange-600 font-medium">
+                          자동차 {c.carCount}건
+                        </span>
+                      )}
+                      {c.longTermCount === 0 && c.carCount === 0 && (
+                        <span className="text-[12px] text-gray-400">보유 상품 없음</span>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Last contact */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm leading-none">⏰</span>
+                  <span className="text-[12px] sm:text-[13px] text-gray-500">최근 컨택: {lastContact}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {message.type === "silson-card" && (
+          <div className="w-full overflow-hidden rounded-2xl bg-white border border-gray-100 shadow-sm">
+            {/* Header */}
+            <div
+              className={`flex items-center gap-2.5 px-4 py-3 border-b border-gray-100 ${
+                message.tone === "warning"
+                  ? "bg-gradient-to-r from-amber-50 to-yellow-50/30"
+                  : "bg-gradient-to-r from-orange-50/80 to-white"
+              }`}
+            >
+              <span className="text-base leading-none">🔎</span>
+              <h4 className="text-[14px] sm:text-[15px] font-bold text-hanwha-navy flex-1">
+                {message.title ?? "실손 검색 결과"}
+              </h4>
+              {message.badge && (
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
+                    message.tone === "warning"
+                      ? "bg-amber-100 text-amber-700"
+                      : "bg-hanwha-orange/10 text-hanwha-orange"
+                  }`}
                 >
                   {message.badge}
                 </span>
-              ) : null}
-              <h4 className={`text-[13px] sm:text-sm font-bold ${SILSON_CARD_STYLES[message.tone ?? "detail"].title}`}>
-                {message.title ?? "실손 검색 결과"}
-              </h4>
+              )}
             </div>
 
-            <div className="flex flex-col gap-1.5 px-4 py-3">
+            {/* Body */}
+            <div className="flex flex-col gap-0.5 px-4 py-3">
               {renderSilsonCardBody(message.content)}
+            </div>
 
-              {message.sources && message.sources.length > 0 && (
-                <div className="mt-1 flex flex-wrap gap-1.5">
+            {/* Sources */}
+            {message.sources && message.sources.length > 0 && (
+              <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/50">
+                <p className="text-[10px] font-medium text-gray-400 mb-1.5">📎 참고 근거</p>
+                <div className="flex flex-wrap gap-1.5">
                   {message.sources.map((source, idx) => (
                     <span
                       key={`${source}-${idx}`}
-                      className="rounded-full border border-black/10 bg-white/80 px-2.5 py-1 text-[10px] sm:text-[11px] text-gray-600"
+                      className="rounded-full bg-white border border-gray-200 px-2.5 py-0.5 text-[10px] text-gray-500"
                     >
                       {source}
                     </span>
                   ))}
                 </div>
-              )}
+              </div>
+            )}
 
-              {message.followUps && message.followUps.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-black/5">
-                  <p className="text-[10px] sm:text-[11px] font-medium text-gray-500 mb-1.5">관련 질문</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {message.followUps.map((fu, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => onFollowUpClick?.(fu)}
-                        className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-[11px] sm:text-[12px] font-medium text-hanwha-orange hover:bg-orange-100 hover:border-orange-300 active:scale-95 transition-all duration-150"
-                      >
-                        {fu}
-                      </button>
-                    ))}
-                  </div>
+            {/* Follow-ups */}
+            {message.followUps && message.followUps.length > 0 && (
+              <div className="px-4 py-2.5 border-t border-gray-100">
+                <p className="text-[10px] font-medium text-gray-400 mb-1.5">💬 이런 것도 물어보세요</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {message.followUps.map((fu, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => onFollowUpClick?.(fu)}
+                      className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-[11px] sm:text-[12px] font-medium text-hanwha-orange hover:bg-orange-100 hover:border-orange-300 active:scale-95 transition-all duration-150"
+                    >
+                      {fu}
+                    </button>
+                  ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Customer list */}
         {message.type === "customer-list" && message.customers && (
-          <div className="flex flex-col gap-2 w-full">
-            {/* Text first */}
-            <div
-              className="px-3.5 sm:px-4 py-2.5 rounded-2xl shadow-sm text-[13px] sm:text-sm leading-relaxed bg-white text-hanwha-navy border border-gray-100"
-            >
+          <div className="w-full overflow-hidden rounded-2xl bg-white border border-gray-100 shadow-sm">
+            {/* Header */}
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-orange-50/60 to-white">
+              <span className="text-base leading-none">👥</span>
+              <h4 className="text-[14px] sm:text-[15px] font-bold text-hanwha-navy flex-1">
+                고객 목록
+              </h4>
+              <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold bg-hanwha-orange/10 text-hanwha-orange">
+                {message.customers.length}명
+              </span>
+            </div>
+            {/* Intro text */}
+            <div className="px-4 py-3 text-[13px] sm:text-sm leading-[1.75] text-hanwha-navy border-b border-gray-50">
               {message.content}
             </div>
             {/* Horizontal scroll cards */}
-            <div className="flex gap-3 overflow-x-auto pb-2 pr-2 -mr-2 chat-scroll">
-              {message.customers.map((customer, i) => (
-                <div key={customer.id} className="shrink-0">
-                  <CustomerCard
-                    customer={customer}
-                    onSelect={onCustomerSelect}
-                    index={i}
-                    isSent={sentCustomerIds?.has(customer.id)}
-                  />
-                </div>
-              ))}
+            <div className="px-4 py-3">
+              <div className="flex gap-3 overflow-x-auto pb-2 -mr-2 chat-scroll">
+                {message.customers.map((customer, i) => (
+                  <div key={customer.id} className="shrink-0">
+                    <CustomerCard
+                      customer={customer}
+                      onSelect={onCustomerSelect}
+                      index={i}
+                      isSent={sentCustomerIds?.has(customer.id)}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
         {/* LMS list */}
         {message.type === "lms-list" && message.lmsMessages && message.customerContext && (
-          <div className="flex flex-col gap-2 w-full">
-            {/* Text first */}
-            <div
-              className="px-3.5 sm:px-4 py-2.5 rounded-2xl shadow-sm text-[13px] sm:text-sm leading-relaxed bg-white text-hanwha-navy border border-gray-100"
-            >
+          <div className="w-full overflow-hidden rounded-2xl bg-white border border-gray-100 shadow-sm">
+            {/* Header */}
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-orange-50/80 to-white">
+              <span className="text-base leading-none">💬</span>
+              <h4 className="text-[14px] sm:text-[15px] font-bold text-hanwha-navy flex-1">
+                LMS 메시지
+              </h4>
+              <span className="rounded-full px-2.5 py-0.5 text-[10px] font-semibold bg-hanwha-orange/10 text-hanwha-orange">
+                {message.lmsMessages.length}건
+              </span>
+            </div>
+            {/* Intro text */}
+            <div className="px-4 py-3 text-[13px] sm:text-sm leading-[1.75] text-hanwha-navy border-b border-gray-50">
               {message.content}
             </div>
             {/* Horizontal scroll cards */}
-            <div className="flex gap-3 overflow-x-auto pb-2 pr-2 -mr-2 chat-scroll">
-              {message.lmsMessages.map((lms, i) => (
-                <div key={lms.id} className="shrink-0">
-                  <LMSMessageCard
-                    message={lms}
-                    customer={message.customerContext!}
-                    onSelect={onLMSSelect}
-                    index={i}
-                  />
-                </div>
-              ))}
+            <div className="px-4 py-3">
+              <div className="flex gap-3 overflow-x-auto pb-2 -mr-2 chat-scroll">
+                {message.lmsMessages.map((lms, i) => (
+                  <div key={lms.id} className="shrink-0">
+                    <LMSMessageCard
+                      message={lms}
+                      customer={message.customerContext!}
+                      onSelect={onLMSSelect}
+                      index={i}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* Timestamp */}
-        {formattedTime && <span className="text-gray-400 text-xs px-1">{formattedTime}</span>}
+        {/* Copy button + Timestamp */}
+        <div className="flex items-center gap-2 px-0.5">
+          {showCopyBtn && (
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="p-1 rounded-md hover:bg-orange-50 text-gray-400 hover:text-hanwha-orange transition-colors duration-150"
+              aria-label="복사"
+            >
+              {copied ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+              )}
+            </button>
+          )}
+          {formattedTime && <span className="text-gray-400 text-xs">{formattedTime}</span>}
+        </div>
       </div>
 
       {/* User avatar placeholder for alignment */}

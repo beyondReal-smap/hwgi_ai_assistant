@@ -10,158 +10,124 @@ export interface SilsonCardSpec {
   followUps?: string[];
 }
 
-function cleanSilsonMarkdown(text: string) {
-  return text
-    .replace(/\r/g, "")
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .replace(/^참고(?:\s*문서|\s*자료)?\s*:\s*.*$/gim, "")
-    .replace(/^---+\s*$/gm, "")
-    .trim();
-}
+/* ── helpers ──────────────────────────────────────────────── */
 
-function trimSilsonHeading(line: string) {
-  return cleanSilsonMarkdown(line)
-    .replace(/^#{1,6}\s*/, "")
-    .replace(/^[\d\uFE0F\u20E3\s.()]+\s*/u, "")
-    .trim();
-}
-
-function normForDedup(s: string): string {
-  return s
-    .replace(/[✅📌📋🔹🔸👉🔎\s\uFE0F\u20E3①②③④⑤⑥⑦⑧⑨⑩]+/gu, "")
-    .replace(/^[\d.()]+/, "")
-    .trim();
-}
-
-function parseSilsonSections(answer: string) {
-  // Split line-by-line instead of block-by-block to preserve tables
-  const lines = cleanSilsonMarkdown(answer)
-    .split("\n")
-    .map((line) => line.trim());
-
-  const sections: Array<{ title: string; content: string; tone: SilsonCardTone }> = [];
-  const seenTitles = new Set<string>();
-  const seenContent = new Set<string>();
-  let currentTitle = "";
-  let currentLines: string[] = [];
-
-  const flushSection = () => {
-    const content = currentLines.join("\n").trim();
-    if (!content && !currentTitle) return;
-
-    const merged = content || currentTitle;
-    const tone: SilsonCardTone =
-      /확인할 수 없습니다|찾지 못했습니다|없습니다/.test(merged)
-        ? "warning"
-        : /정확한 안내를 위해|필요합니다|구체적으로 알려주시면/.test(merged)
-          ? "detail"
-          : currentTitle
-            ? "detail"
-            : "answer";
-
-    sections.push({
-      title: currentTitle || (sections.length === 0 ? "핵심 답변" : "추가 안내"),
-      content: content || merged,
-      tone,
-    });
-  };
-
-  for (const line of lines) {
-    if (!line) continue;
-    if (line.startsWith("질문:")) continue;
-    if (/^참고(?:\s*문서|\s*자료)?\s*:/i.test(line)) continue;
-
-    // Detect section headings
-    const isHeading = /^#{1,6}\s+/.test(line);
-    const isNumbered = /^\d[\d\uFE0F\u20E3]*[.\s)]+\S/u.test(line);
-    const isCircled = /^[①②③④⑤⑥⑦⑧⑨⑩]\s+/.test(line);
-
-    if (isHeading || isNumbered || isCircled) {
-      const title = trimSilsonHeading(line);
-      const normKey = normForDedup(title);
-
-      // Skip duplicate titles
-      if (seenTitles.has(normKey)) continue;
-      seenTitles.add(normKey);
-
-      flushSection();
-      currentTitle = title;
-      currentLines = [];
-      continue;
-    }
-
-    // Dedup: skip content line if same as current section title
-    if (currentTitle && currentLines.length === 0) {
-      const normTitle = normForDedup(currentTitle);
-      const normLine = normForDedup(line);
-      if (normTitle && normLine && (normTitle === normLine || normLine.startsWith(normTitle) || normTitle.startsWith(normLine))) {
-        continue;
-      }
-    }
-
-    // Dedup: skip duplicate body lines (10+ chars after normalization)
-    const normBody = line.replace(/\s+/g, "");
-    if (normBody.length > 10) {
-      if (seenContent.has(normBody)) continue;
-      seenContent.add(normBody);
-    }
-
-    currentLines.push(line);
+function dedupeLines(items: Array<string | null | undefined>, limit = 5): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const v = item?.trim();
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+    if (out.length >= limit) break;
   }
-  flushSection();
-
-  return sections;
+  return out;
 }
 
-function formatSilsonSourceLabel(data: SilsonSearchResponse) {
+function formatSourceLabels(data: SilsonSearchResponse): string[] {
   const labels: string[] = [];
   const seen = new Set<string>();
-
   for (const chunk of data.chunks) {
     const topic = chunk.clause_name || chunk.coverage_name || chunk.source_label || "관련 기준";
     const parts = [chunk.generation, chunk.product_alias, topic].filter(Boolean);
     const label = parts.join(" | ");
-
     if (label && !seen.has(label)) {
       seen.add(label);
       labels.push(label);
     }
   }
-
-  if (labels.length > 0) {
-    return labels.slice(0, 5);
-  }
-
+  if (labels.length > 0) return labels.slice(0, 5);
   return data.sources
-    .map((source) => source.replace(/\.md\b/gi, "").trim())
+    .map((s) => s.replace(/\.md\b/gi, "").trim())
     .filter(Boolean)
     .slice(0, 5);
 }
 
-export function buildSilsonCards(query: string, data: SilsonSearchResponse): SilsonCardSpec[] {
-  const cards: SilsonCardSpec[] = [];
-  const sourceLabels = formatSilsonSourceLabel(data);
+function cleanMarkdown(text: string): string {
+  return text
+    .replace(/\r/g, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/^---+\s*$/gm, "")
+    .replace(/^참고(?:\s*문서|\s*자료)?\s*:\s*.*$/gim, "")
+    .trim();
+}
 
-  const answerSections = parseSilsonSections(data.answer);
-  const filterSummary = [
-    `질문: ${query}`,
+/* ── main builder ─────────────────────────────────────────── */
+
+export function buildSilsonCards(
+  query: string,
+  data: SilsonSearchResponse,
+): SilsonCardSpec[] {
+  const sourceLabels = formatSourceLabels(data);
+  const sa = data.structured_answer;
+  const hasChunks = data.chunks.length > 0;
+  const sections: string[] = [];
+
+  // Meta tags
+  const metaParts = [
     data.filters.generation ? `세대: ${data.filters.generation}` : null,
     data.filters.join_ym ? `가입시기: ${data.filters.join_ym}` : null,
-  ].filter(Boolean).join("\n");
+  ].filter(Boolean);
+  if (metaParts.length > 0) {
+    sections.push(`🏷️ ${metaParts.join(" | ")}`);
+  }
+  const metaCount = sections.length;
 
-  const answerContent = answerSections.length === 0
-    ? cleanSilsonMarkdown(data.answer) || "검색 결과를 찾지 못했습니다."
-    : answerSections
-      .map((section) => `${section.title}\n${section.content}`.trim())
-      .join("\n\n");
+  if (sa) {
+    const summary = sa.summary?.trim();
+    const contextNote = sa.context_note?.trim();
+    const answer = sa.answer?.trim();
+    const coveragePoints = dedupeLines(sa.coverage_points ?? [], 4);
+    const cautions = dedupeLines(sa.cautions ?? [], 3);
+    const checkpoints = dedupeLines(
+      [...(sa.checkpoints ?? []), sa.reference_note].filter(Boolean),
+      4,
+    );
 
-  cards.push({
-    title: "실손 검색 결과",
-    tone: data.chunks.length > 0 ? "answer" : "warning",
-    content: `${filterSummary}\n\n${answerContent}`.trim(),
-    sources: sourceLabels,
-    followUps: data.follow_ups?.length ? data.follow_ups : undefined,
-  });
+    if (summary) sections.push(`💡 핵심 요약\n${summary}`);
 
-  return cards;
+    if (contextNote || answer) {
+      const detail = [contextNote, answer].filter(Boolean).join("\n\n");
+      sections.push(`📝 상세 설명\n${detail}`);
+    }
+
+    if (coveragePoints.length > 0) {
+      sections.push(
+        `✅ 보상 포인트\n${coveragePoints.map((p) => `- ${p}`).join("\n")}`,
+      );
+    }
+
+    if (cautions.length > 0) {
+      sections.push(
+        `⚠️ 주의할 점\n${cautions.map((c) => `- ${c}`).join("\n")}`,
+      );
+    }
+
+    if (checkpoints.length > 0) {
+      sections.push(
+        `📌 상담 체크포인트\n${checkpoints.map((c) => `- ${c}`).join("\n")}`,
+      );
+    }
+  }
+
+  // Fallback: if structured answer produced nothing, use raw answer
+  if (sections.length <= metaCount) {
+    const cleaned = cleanMarkdown(data.answer);
+    sections.push(
+      cleaned ? `📝 답변\n${cleaned}` : "검색 결과를 찾지 못했습니다.",
+    );
+  }
+
+  return [
+    {
+      title: "실손 AI 답변",
+      badge: hasChunks ? "AI 답변" : "확인 필요",
+      tone: hasChunks ? "answer" : "warning",
+      content: sections.join("\n\n"),
+      sources: sourceLabels,
+      followUps: data.follow_ups?.length ? data.follow_ups : undefined,
+    },
+  ];
 }

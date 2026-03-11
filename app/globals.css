@@ -96,6 +96,25 @@ body {
   animation-delay: 0.4s;
 }
 
+/* Silson progress spinner */
+@keyframes silsonSpin {
+  to { transform: rotate(360deg); }
+}
+
+.silson-spinner {
+  animation: silsonSpin 0.7s linear infinite;
+}
+
+/* Inline dot fade for progress labels */
+@keyframes dotFade {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+
+.typing-dot-inline {
+  animation: dotFade 1.2s ease-in-out infinite;
+}
+
 /* Message animations */
 @keyframes messageSlideIn {
   0% {
@@ -198,6 +217,13 @@ button:focus-visible {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Copy button: always visible on touch devices */
+@media (hover: none) {
+  .copy-btn {
+    opacity: 1 !important;
+  }
 }
 
 /* Jobcode keyword highlight */

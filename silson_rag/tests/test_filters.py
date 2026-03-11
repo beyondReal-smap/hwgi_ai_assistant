@@ -51,7 +51,7 @@ class TestInferGeneration:
         assert infer_generation_from_join_ym(200201) == "1세대"
 
     def test_2nd_gen(self):
-        assert infer_generation_from_join_ym(200501) == "2세대"
+        assert infer_generation_from_join_ym(201405) == "2세대"
 
     def test_3rd_gen(self):
         assert infer_generation_from_join_ym(201801) == "3세대"
@@ -65,6 +65,11 @@ class TestDetectFilters:
         result = detect_filters("2018년에 가입한 착한실손에서 병실료차액은?")
         assert result.generation == "3세대"
         assert result.join_ym == 201801
+
+    def test_2014_join_maps_to_2nd_gen(self):
+        result = detect_filters("2014년에 가입한 실손 자기부담금")
+        assert result.generation == "2세대"
+        assert result.join_ym == 201401
 
     def test_join_ym_infers_generation(self):
         result = detect_filters("2022년 가입 보상기준")

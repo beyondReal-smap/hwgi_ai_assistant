@@ -34,6 +34,25 @@ def openai_post_json(path: str, payload: Dict[str, Any], *, timeout: int = 45) -
         return json.loads(response.read().decode("utf-8"))
 
 
+def create_embeddings(
+    texts: list[str],
+    *,
+    model: str | None = None,
+    timeout: int = 60,
+) -> list[list[float]]:
+    """Call OpenAI Embeddings API and return embedding vectors."""
+    from .config import CFG as _cfg
+
+    payload = {
+        "model": model or _cfg.openai_embed_model,
+        "input": texts,
+    }
+    data = openai_post_json("/embeddings", payload, timeout=timeout)
+    items = data.get("data", [])
+    items.sort(key=lambda x: x.get("index", 0))
+    return [item["embedding"] for item in items]
+
+
 def chat_completion(
     messages: list[Dict[str, str]],
     *,

@@ -30,9 +30,9 @@ SOURCE_KIND_ALIASES = {
 
 # join_ym ranges for each generation (sales_start_ym ~ sales_end_ym)
 GENERATION_SALES_RANGES = {
-    "1세대": (None, 200309),
-    "2세대": (200310, 200903),
-    "3세대": (200904, 202106),
+    "1세대": (None, 200907),
+    "2세대": (200908, 201703),
+    "3세대": (201704, 202106),
     "4세대": (202107, None),
 }
 
@@ -89,8 +89,18 @@ def detect_filters(question: str) -> FilterResult:
     )
 
 
-def apply_df_filters(df: pd.DataFrame, filters: FilterResult) -> pd.DataFrame:
-    """Apply metadata filters to DataFrame. Falls back to full df if result is empty."""
+def merge_filters(primary: FilterResult, secondary: Optional[FilterResult] = None) -> FilterResult:
+    """Merge two FilterResult values, preferring non-empty values from primary."""
+    secondary = secondary or FilterResult()
+    return FilterResult(
+        generation=primary.generation or secondary.generation,
+        source_kind=primary.source_kind or secondary.source_kind,
+        join_ym=primary.join_ym or secondary.join_ym,
+    )
+
+
+def apply_df_filters(df: pd.DataFrame, filters: FilterResult, *, fallback_to_full: bool = True) -> pd.DataFrame:
+    """Apply metadata filters to DataFrame."""
     filtered = df
 
     if filters.generation:
@@ -104,7 +114,7 @@ def apply_df_filters(df: pd.DataFrame, filters: FilterResult) -> pd.DataFrame:
         cond_end = filtered["is_current"] | filtered["sales_end_ym"].isna() | (filtered["sales_end_ym"] >= filters.join_ym)
         filtered = filtered[cond_start & cond_end]
 
-    return filtered if not filtered.empty else df
+    return filtered if not filtered.empty or not fallback_to_full else df
 
 
 def build_openai_filters(filters: FilterResult) -> Optional[Dict[str, Any]]:

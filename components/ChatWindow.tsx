@@ -20,6 +20,7 @@ import { LMS_MESSAGES } from "@/lib/data";
 import { track } from "@/lib/analytics";
 import MessageBubble from "./MessageBubble";
 import TypingIndicator from "./TypingIndicator";
+import StepProgressIndicator, { SILSON_STEPS, LMS_STEPS } from "./SilsonProgressIndicator";
 import PhonePreviewModal from "./PhonePreviewModal";
 
 const CHAT_STATE_KEY = "chat_state";
@@ -119,6 +120,8 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
   );
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [isSilsonSearching, setIsSilsonSearching] = useState(false);
+  const [isLmsProgress, setIsLmsProgress] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedLMS, setSelectedLMS] = useState<LMSMessage | null>(null);
   const [selectedCustomerForModal, setSelectedCustomerForModal] =
@@ -143,7 +146,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, scrollToBottom]);
+  }, [messages, isSilsonSearching, isLmsProgress, scrollToBottom]);
 
   useEffect(() => {
     // Chat state was already restored from sessionStorage in useState initializers
@@ -271,7 +274,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
   }, []);
 
   const handleUserInput = async (query: string) => {
-    if (!query.trim() || isTyping) return;
+    if (!query.trim() || isTyping || isSilsonSearching) return;
     track("chat_send", { query });
     addUserMessage(query);
     setInputValue("");
@@ -325,7 +328,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
             }),
           });
           const { text } = (await csvRes.json()) as { text: string };
-          addBotMessage({ role: "bot", type: "text", content: text });
+          addBotMessage({ role: "bot", type: "data-card", content: text });
 
           // LLM 분석 비동기 호출 (데이터가 있는 경우만)
           if (text && !text.includes("찾을 수 없습니다") && !text.includes("없습니다.")) {
@@ -358,34 +361,28 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
       // 실손의료비 약관/보상 기준 질의
       if (parsed.intent === "silson_search") {
         try {
-          setIsTyping(true);
+          setIsSilsonSearching(true);
           const silsonRes = await fetch("/api/silson-search", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ query, topk: 5 }),
           });
-          setIsTyping(false);
+          setIsSilsonSearching(false);
           if (!silsonRes.ok) throw new Error(`silson-search ${silsonRes.status}`);
           const silsonData = await silsonRes.json() as SilsonSearchResponse;
-          const cards = buildSilsonCards(query, silsonData);
-
-          for (let i = 0; i < cards.length; i += 1) {
-            setIsTyping(true);
-            await sleep(i === 0 ? 420 : 760);
-            setIsTyping(false);
-            addBotMessage({
-              role: "bot",
-              type: "silson-card",
-              title: cards[i].title,
-              badge: cards[i].badge,
-              tone: cards[i].tone,
-              content: cards[i].content,
-              sources: cards[i].sources,
-              followUps: cards[i].followUps,
-            });
-          }
+          const card = buildSilsonCards(query, silsonData)[0];
+          addBotMessage({
+            role: "bot",
+            type: "silson-card",
+            title: card.title,
+            badge: card.badge,
+            tone: card.tone,
+            content: card.content,
+            sources: card.sources,
+            followUps: card.followUps,
+          });
         } catch {
-          setIsTyping(false);
+          setIsSilsonSearching(false);
           addBotMessage({
             role: "bot",
             type: "text",
@@ -427,9 +424,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
     setIsGenerating(true);
 
     addUserMessage(`${customer.name} 고객님의 정보를 확인하고 LMS 메시지를 작성해 주세요.`);
-    setIsTyping(true);
-    await sleep(1400);
-    setIsTyping(false);
+    await sleep(600);
 
     // 고객 상세 정보 표시
     const lastContactText = customer.lastContact
@@ -441,25 +436,18 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
 
     addBotMessage({
       role: "bot",
-      type: "text",
+      type: "customer-info",
       content: `📋 ${customer.name} 고객 정보\n\n👤 ${customer.gender}성, ${customer.age}세 (${customer.birthDate})\n🎯 이벤트: ${customer.event}\n📌 ${customer.eventDetail}${productSection}\n\n⏰ ${lastContactText}\n⚡ 긴급도: ${urgencyLabel[customer.urgency]}`,
+      customerContext: customer,
     });
 
-    // 고객 정보를 읽을 시간 확보 후 타이핑 인디케이터 표시
+    // 고객 정보를 읽을 시간 확보 후 LMS 진행 표시기
     await sleep(1200);
-    setIsTyping(true);
-
-    // 타이핑 인디케이터가 충분히 보인 뒤 "생성 중" 메시지 표시
-    await sleep(1400);
-    addBotMessage({
-      role: "bot",
-      type: "text",
-      content: `AI 영업비서가 ${customer.name} 고객님의 상황에 맞는 LMS 메시지를 생성하고 있습니다...`,
-    });
+    setIsLmsProgress(true);
 
     try {
       const lmsMessages = await generateLMSViaAI(customer, fpProfile.name);
-      setIsTyping(false);
+      setIsLmsProgress(false);
       addBotMessage({
         role: "bot",
         type: "lms-list",
@@ -471,7 +459,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
       console.warn("[LMS] AI generation failed, falling back:", err);
       // 폴백: 정적 더미 데이터 사용
       await sleep(800);
-      setIsTyping(false);
+      setIsLmsProgress(false);
       const fallback = LMS_MESSAGES[customer.id] ?? [];
       addBotMessage({
         role: "bot",
@@ -538,7 +526,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
     handleUserInput(inputValue);
   };
 
-  const busy = isTyping || isGenerating;
+  const busy = isTyping || isSilsonSearching || isLmsProgress || isGenerating;
   const showQuickScrollHint = QUICK_ACTIONS.length > 4;
 
   return (
@@ -577,7 +565,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
 
       {/* Chat messages area */}
       <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 chat-scroll relative z-10">
-        <div className="max-w-3xl mx-auto">
+        <div className="mx-auto max-w-3xl lg:max-w-5xl xl:max-w-6xl">
           {messages.map((msg) => (
             <MessageBubble
               key={msg.id}
@@ -590,6 +578,8 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
           ))}
 
           {isTyping && <TypingIndicator />}
+          {isSilsonSearching && <StepProgressIndicator steps={SILSON_STEPS} />}
+          {isLmsProgress && <StepProgressIndicator steps={LMS_STEPS} />}
 
           <div />
         </div>
@@ -597,7 +587,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
 
       {/* Bottom input area */}
       <div className="shrink-0 bg-white border-t border-gray-100 px-3 sm:px-4 md:px-6 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:py-4 relative z-10">
-        <div className="max-w-3xl mx-auto">
+        <div className="mx-auto max-w-3xl lg:max-w-5xl xl:max-w-6xl">
           {/* Quick chips */}
           {showQuickScrollHint && (
             <div className="mb-2 flex items-center justify-between px-1 text-[11px] text-gray-400 sm:hidden">

@@ -3,6 +3,16 @@ export interface SilsonSearchRequest {
   topk?: number;
 }
 
+export interface SilsonStructuredAnswer {
+  summary: string;
+  context_note?: string;
+  answer: string;
+  coverage_points?: string[];
+  cautions?: string[];
+  checkpoints?: string[];
+  reference_note?: string;
+}
+
 export interface SilsonChunk {
   doc_id: string;
   source_kind: string;
@@ -34,4 +44,5 @@ export interface SilsonSearchResponse {
     join_ym: number | null;
   };
   follow_ups?: string[];
+  structured_answer?: SilsonStructuredAnswer | null;
 }

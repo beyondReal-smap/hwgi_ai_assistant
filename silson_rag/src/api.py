@@ -19,6 +19,7 @@ from .engine.filters import (
     build_openai_filters,
     detect_filters,
     detect_generation,
+    merge_filters,
     detect_source_kind,
 )
 from .engine.followups import generate_followups
@@ -31,6 +32,7 @@ from .llm_answer import (
     answer_with_vector_store,
     fallback_answer,
     generate_answer_local,
+    search_vector_store_hits,
 )
 from .types import FilterResult, SearchHit, SearchResult
 
@@ -157,26 +159,41 @@ def _row_to_hit(row: pd.Series, score: float) -> SearchHit:
 # Local search
 # ---------------------------------------------------------------------------
 
-def search_local(query: str, topk: int = 5) -> List[SearchHit]:
+def search_local(query: str, topk: int = 5, filters: Optional[FilterResult] = None) -> List[SearchHit]:
     """Hybrid BM25 + embedding local search."""
     full_df = _load_clause_df()
-    filters = detect_filters(query)
-    df = apply_df_filters(full_df, filters)
+    filters = filters or detect_filters(query)
+    df = apply_df_filters(full_df, filters, fallback_to_full=False)
+    if df.empty:
+        relaxation_steps = [
+            FilterResult(generation=filters.generation, source_kind=filters.source_kind, join_ym=None),
+            FilterResult(generation=filters.generation, source_kind=None, join_ym=None),
+            FilterResult(generation=None, source_kind=filters.source_kind, join_ym=None),
+        ]
+        for relaxed in relaxation_steps:
+            if relaxed == filters:
+                continue
+            candidate = apply_df_filters(full_df, relaxed, fallback_to_full=False)
+            if not candidate.empty:
+                df = candidate
+                break
+    if df.empty:
+        df = full_df
 
     # Query rewriting
     q_tokens = tokenize(query)
     rewrite_result = None
-    if CFG.use_query_rewriting:
+    if CFG.use_query_rewriting and CFG.openai_api_key.strip():
         if needs_rewriting(query, q_tokens):
             rewrite_result = rewrite_query(query)
             q_tokens = merge_tokens(q_tokens, rewrite_result)
 
             # Apply LLM-inferred filters if regex missed them
-            if rewrite_result.inferred_generation and detect_generation(query) is None:
+            if rewrite_result.inferred_generation and filters.generation is None and detect_generation(query) is None:
                 gen_filtered = df[df["generation"] == rewrite_result.inferred_generation]
                 if not gen_filtered.empty:
                     df = gen_filtered
-            if rewrite_result.inferred_source_kind and detect_source_kind(query) is None:
+            if rewrite_result.inferred_source_kind and filters.source_kind is None and detect_source_kind(query) is None:
                 sk_filtered = df[df["source_kind"] == rewrite_result.inferred_source_kind]
                 if not sk_filtered.empty:
                     df = sk_filtered
@@ -220,75 +237,31 @@ def search_local(query: str, topk: int = 5) -> List[SearchHit]:
     return hits
 
 
+def retrieve_hits(query: str, topk: int = 5, filters: Optional[FilterResult] = None) -> tuple[List[SearchHit], str, str]:
+    """Retrieve evidence hits using vector store first, then local fallback."""
+    filters = merge_filters(filters or FilterResult(), detect_filters(query))
+
+    if CFG.vector_store_id.strip() and CFG.openai_api_key.strip():
+        try:
+            openai_filters = build_openai_filters(filters)
+            hits = search_vector_store_hits(query, openai_filters, topk=topk)
+            return hits, "openai_vector_store", "responses_api"
+        except Exception:
+            pass
+
+    hits = search_local(query, topk=topk, filters=filters)
+    return hits, "silson_rag_clauses", "disabled"
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 def search(query: str, topk: int = 5) -> SearchResult:
-    """Main search entry point with 3-tier answer generation."""
-    filters = detect_filters(query)
-    filter_dict = {
-        "generation": filters.generation,
-        "source_kind": filters.source_kind,
-        "join_ym": filters.join_ym,
-    }
+    """Main search entry point."""
+    from .workflow import run_silson_search_workflow
 
-    hits: List[SearchHit] = []
-    answer = ""
-    retrieval_mode = "silson_rag_clauses"
-    llm_status = "disabled"
-
-    # Tier 1: Vector Store
-    if CFG.vector_store_id.strip() and CFG.openai_api_key.strip():
-        try:
-            openai_filters = build_openai_filters(filters)
-            answer, hits = answer_with_vector_store(query, openai_filters, topk=topk)
-            retrieval_mode = "openai_vector_store"
-            llm_status = "responses_api"
-        except Exception:
-            hits = []
-            answer = ""
-            retrieval_mode = "openai_vector_store_fallback"
-            llm_status = "fallback"
-
-    # Tier 2/3: Local search + LLM or rule-based answer
-    if not hits:
-        hits = search_local(query, topk=topk)
-
-    if not answer:
-        answer = generate_answer_local(query, hits)
-
-    follow_ups = generate_followups(query, hits, filters)
-
-    return SearchResult(
-        query=query,
-        answer=answer,
-        sources=_source_labels(hits),
-        chunks=[
-            {
-                "doc_id": hit.doc_id,
-                "source_kind": hit.source_kind,
-                "source_label": hit.source_label,
-                "generation": hit.generation,
-                "product_alias": hit.product_alias,
-                "sales_period": hit.sales_period,
-                "coverage_name": hit.coverage_name,
-                "clause_name": hit.clause_name,
-                "clause_text_oneline": hit.clause_text_oneline,
-                "source_file": hit.source_file,
-                "filename": hit.filename,
-                "score": hit.score,
-                "document_excerpt": hit.document_excerpt,
-            }
-            for hit in hits
-        ],
-        mode={
-            "retrieval": retrieval_mode,
-            "llm_status": llm_status,
-        },
-        filters=filter_dict,
-        follow_ups=follow_ups,
-    )
+    return run_silson_search_workflow(query, topk=topk)
 
 
 def is_ready() -> bool:

@@ -6,28 +6,28 @@ import type { LMSMessage, Customer } from "@/lib/types";
 
 const typeConfig = {
   "안내형": {
-    label: "📋 안내형",
+    label: "📢 안내형",
     bg: "#EFF6FF",
     text: "#2563EB",
     border: "#BFDBFE",
-    btnBg: "#2563EB",
-    desc: "정보 전달 중심",
+    btnBg: "#3B82F6",
+    desc: "📌 정보 전달 중심",
   },
   "감성형": {
-    label: "💙 감성형",
-    bg: "#FDF4FF",
-    text: "#9333EA",
-    border: "#E9D5FF",
-    btnBg: "#9333EA",
-    desc: "따뜻한 공감",
+    label: "🤝 감성형",
+    bg: "#FFFDF7",
+    text: "#D97706",
+    border: "#FEF08A",
+    btnBg: "#EAB308",
+    desc: "💕 따뜻한 공감",
   },
   "혜택/관리형": {
     label: "✨ 혜택/관리형",
-    bg: "#FFF7ED",
-    text: "#EA580C",
-    border: "#FED7AA",
-    btnBg: "#F37321",
-    desc: "전문 관리 강조",
+    bg: "#FFF5F5",
+    text: "#E11D48",
+    border: "#FECDD3",
+    btnBg: "#E11D48",
+    desc: "💎 전문 관리 강조",
   },
 };
 

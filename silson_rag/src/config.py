@@ -32,6 +32,7 @@ class SilsonConfig:
     clause_docs_dir: Path = PACKAGE_ROOT / "search_clause_docs_md"
     manifest_csv: Path = PACKAGE_ROOT / "openai_upload_clause_manifest.csv"
     artifact_dir: Path = PACKAGE_ROOT / "artifacts"
+    customer_contracts_csv: Path = PACKAGE_ROOT.parent / "lib" / "data" / "cvr.csv"
 
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
@@ -46,6 +47,13 @@ class SilsonConfig:
     alpha_keyword: float = _env_float("SILSON_ALPHA_KEYWORD", 0.6)
     use_embedding: bool = _env_bool("SILSON_USE_EMBEDDING", True)
     use_query_rewriting: bool = _env_bool("SILSON_USE_QUERY_REWRITING", True)
+
+    # QA knowledge base
+    qa_knowledge_dir: Path = PACKAGE_ROOT / "artifacts" / "qa_knowledge"
+    qa_csv_path: Path = PACKAGE_ROOT.parent / "RAG" / "장기보상인보험_QA.csv"
+    ref_csv_dir: Path = PACKAGE_ROOT.parent / "RAG"
+    openai_embed_model: str = os.getenv("SILSON_OPENAI_EMBED_MODEL", "text-embedding-3-large")
+    use_qa_knowledge: bool = _env_bool("SILSON_USE_QA_KNOWLEDGE", True)
 
 
 CFG = SilsonConfig()

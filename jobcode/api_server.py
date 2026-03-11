@@ -9,7 +9,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT / "src") not in sys.path:
@@ -102,6 +102,16 @@ class SilsonSearchRequest(BaseModel):
     topk: int = 5
 
 
+class StructuredSilsonAnswerResponse(BaseModel):
+    summary: str = ""
+    context_note: str = ""
+    answer: str = ""
+    coverage_points: List[str] = Field(default_factory=list)
+    cautions: List[str] = Field(default_factory=list)
+    checkpoints: List[str] = Field(default_factory=list)
+    reference_note: str = ""
+
+
 class SilsonSearchResponse(BaseModel):
     query: str
     answer: str
@@ -109,7 +119,8 @@ class SilsonSearchResponse(BaseModel):
     chunks: List[Dict[str, Any]]
     mode: Dict[str, str]
     filters: Dict[str, Any]
-    follow_ups: List[str] = []
+    follow_ups: List[str] = Field(default_factory=list)
+    structured_answer: Optional[StructuredSilsonAnswerResponse] = None
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +417,7 @@ async def silson_search_endpoint(req: SilsonSearchRequest):
             "mode": result.mode,
             "filters": result.filters,
             "follow_ups": result.follow_ups,
+            "structured_answer": result.structured_answer.__dict__ if result.structured_answer else None,
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
