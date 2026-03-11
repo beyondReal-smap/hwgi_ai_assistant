@@ -20,7 +20,8 @@ SYSTEM_PROMPT = (
     "질문이 애매하면 가능한 해석을 나눠 설명하라.\n"
     "\n"
     "## 답변 형식 규칙 (반드시 지킬 것)\n"
-    "- 같은 제목이나 소제목을 절대 반복하지 마라. 한 번만 쓰고 해당 내용을 그 아래에 정리하라.\n"
+    "- 같은 제목, 소제목, 문단, 문장을 절대 반복하지 마라. 모든 내용은 한 번만 언급하라.\n"
+    "- 여러 문서가 같은 내용을 담고 있더라도 중복 없이 한 번만 정리하라.\n"
     "- 비교나 정리가 필요할 때는 마크다운 표를 사용하라. 표 형식: | 구분 | 내용 |\\n|------|------|\\n| 값 | 값 |\n"
     "- 글머리 기호(-, •)나 번호 목록(1., 2.)으로 간결하게 정리하라.\n"
     "- 이모지(✅, 🔎 등)를 사용하지 마라.\n"
@@ -39,6 +40,26 @@ def _source_labels(hits: List[SearchHit]) -> List[str]:
             seen.add(label)
             labels.append(label)
     return labels
+
+
+def _dedup_paragraphs(text: str) -> str:
+    """Remove duplicate paragraphs from LLM answer text."""
+    lines = text.split("\n")
+    result: List[str] = []
+    seen: set[str] = set()
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            result.append(line)
+            continue
+        # Normalize for comparison: remove whitespace, punctuation differences
+        norm = stripped.replace(" ", "").replace("\u3000", "")
+        if len(norm) > 10 and norm in seen:
+            continue
+        if len(norm) > 10:
+            seen.add(norm)
+        result.append(line)
+    return "\n".join(result)
 
 
 def _build_context(hits: List[SearchHit]) -> str:
@@ -106,7 +127,9 @@ def generate_answer_local(query: str, hits: List[SearchHit]) -> str:
         max_tokens=700,
         timeout=30,
     )
-    return content or fallback_answer(query, hits)
+    if content:
+        return _dedup_paragraphs(content)
+    return fallback_answer(query, hits)
 
 
 # ---------------------------------------------------------------------------
@@ -293,5 +316,5 @@ def answer_with_vector_store(
     if not hits:
         raise RuntimeError("responses API returned no file_search results")
 
-    answer = content or fallback_answer(query, hits)
+    answer = _dedup_paragraphs(content) if content else fallback_answer(query, hits)
     return answer, hits

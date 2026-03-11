@@ -86,6 +86,7 @@ function renderSilsonCardBody(content: string) {
   const META_RE = /^(질문|가입시기|세대|상품명|보험종류)\s*[:：]\s*/;
   // Subsection headers like "① 구계약 (판매시기: ~ 2003.09)"
   const SUBSECTION_RE = /^[①②③④⑤⑥⑦⑧⑨⑩]\s+.+$/;
+  const seenBodyLines = new Set<string>();
 
   let i = 0;
   while (i < lines.length) {
@@ -128,6 +129,12 @@ function renderSilsonCardBody(content: string) {
           i++;
           continue;
         }
+      }
+      // Dedup: skip duplicate body lines (10+ chars after whitespace removal)
+      const normBody = line.replace(/\s+/g, "");
+      if (normBody.length > 10) {
+        if (seenBodyLines.has(normBody)) { i++; continue; }
+        seenBodyLines.add(normBody);
       }
       currentSection.lines.push(line);
       i++;

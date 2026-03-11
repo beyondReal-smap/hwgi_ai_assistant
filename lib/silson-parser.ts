@@ -41,6 +41,7 @@ function parseSilsonSections(answer: string) {
 
   const sections: Array<{ title: string; content: string; tone: SilsonCardTone }> = [];
   const seenTitles = new Set<string>();
+  const seenContent = new Set<string>();
   let currentTitle = "";
   let currentLines: string[] = [];
 
@@ -96,6 +97,13 @@ function parseSilsonSections(answer: string) {
       if (normTitle && normLine && (normTitle === normLine || normLine.startsWith(normTitle) || normTitle.startsWith(normLine))) {
         continue;
       }
+    }
+
+    // Dedup: skip duplicate body lines (10+ chars after normalization)
+    const normBody = line.replace(/\s+/g, "");
+    if (normBody.length > 10) {
+      if (seenContent.has(normBody)) continue;
+      seenContent.add(normBody);
     }
 
     currentLines.push(line);
