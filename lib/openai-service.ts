@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 
 const MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
-const LLM_TIMEOUT_MS = 15_000;
+const LLM_TIMEOUT_MS = 30_000;
 
 function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -14,6 +14,17 @@ export interface CallLlmOptions {
   timeoutMs?: number;
 }
 
+/** Hard timeout wrapper — always resolves or rejects within the given ms. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
 /**
  * Call OpenAI with automatic Responses API -> Chat Completions fallback.
  * Returns the raw text output from the model.
@@ -21,19 +32,20 @@ export interface CallLlmOptions {
 export async function callLlm(prompt: string, options: CallLlmOptions = {}): Promise<string> {
   const { maxTokens = 1500, systemPrompt, jsonMode, timeoutMs = LLM_TIMEOUT_MS } = options;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
+  // Try Responses API first
   try {
-    // Try Responses API first (for newer models like gpt-5, gpt-4.1)
+    const controller = new AbortController();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response = await (getOpenAI() as any).responses.create(
+    const responsesPromise = (getOpenAI() as any).responses.create(
       {
         model: MODEL,
         input: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt,
       },
-      { signal: controller.signal }
+      { signal: controller.signal },
     );
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const response: any = await withTimeout(responsesPromise, timeoutMs, "Responses API");
 
     if (typeof response?.output_text === "string") return response.output_text;
     if (Array.isArray(response?.output)) {
@@ -46,26 +58,34 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
       }
     }
     return "";
-  } catch {
-    // Fallback to Chat Completions API
+  } catch (err) {
+    console.warn("[callLlm] Responses API failed, trying Chat Completions:", (err as Error).message);
+  }
+
+  // Fallback to Chat Completions API
+  try {
+    const controller2 = new AbortController();
     const messages: Array<{ role: "system" | "user"; content: string }> = [];
     if (systemPrompt) {
       messages.push({ role: "system", content: systemPrompt });
     }
     messages.push({ role: "user", content: prompt });
 
-    const completion = await getOpenAI().chat.completions.create(
+    const completionPromise = getOpenAI().chat.completions.create(
       {
         model: MODEL,
         messages,
         max_completion_tokens: maxTokens,
         ...(jsonMode ? { response_format: { type: "json_object" as const } } : {}),
       },
-      { signal: controller.signal }
+      { signal: controller2.signal },
     );
+
+    const completion = await withTimeout(completionPromise, timeoutMs, "Chat Completions API");
     return completion.choices[0]?.message?.content ?? "";
-  } finally {
-    clearTimeout(timer);
+  } catch (err) {
+    console.error("[callLlm] Chat Completions also failed:", (err as Error).message);
+    throw err;
   }
 }
 

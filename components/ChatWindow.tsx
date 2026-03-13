@@ -19,8 +19,8 @@ import { QUICK_ACTIONS } from "@/lib/constants";
 import { LMS_MESSAGES } from "@/lib/data";
 import { track } from "@/lib/analytics";
 import MessageBubble from "./MessageBubble";
-import TypingIndicator from "./TypingIndicator";
-import StepProgressIndicator, { SILSON_STEPS, LMS_STEPS } from "./SilsonProgressIndicator";
+import type { LMSSendInfo } from "./PaginatedTable";
+import StepProgressIndicator, { SILSON_STEPS } from "./SilsonProgressIndicator";
 import PhonePreviewModal from "./PhonePreviewModal";
 
 const CHAT_STATE_KEY = "chat_state";
@@ -62,18 +62,26 @@ const urgencyLabel: Record<string, string> = {
   low: "🟢 낮음",
 };
 
-/** API 호출로 ChatGPT가 즉석으로 LMS 3종 생성 */
+/** API 호출로 ChatGPT가 즉석으로 LMS 3종 생성 (35초 타임아웃) */
 async function generateLMSViaAI(customer: Customer, fpName?: string): Promise<LMSMessage[]> {
-  const res = await fetch("/api/generate-lms", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ customer, fpName }),
-  });
-  if (!res.ok) throw new Error(`API ${res.status}`);
-  const data = (await res.json()) as { messages: LMSMessage[] };
-  if (!Array.isArray(data.messages) || data.messages.length === 0)
-    throw new Error("Empty response");
-  return data.messages;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 35_000);
+
+  try {
+    const res = await fetch("/api/generate-lms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customer, fpName }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    const data = (await res.json()) as { messages: LMSMessage[] };
+    if (!Array.isArray(data.messages) || data.messages.length === 0)
+      throw new Error("Empty response");
+    return data.messages;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 interface ChatWindowProps {
@@ -119,9 +127,8 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
     () => restoredRef.current?.touchCustomers ?? []
   );
   const [inputValue, setInputValue] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
+  const [typingMessage, setTypingMessage] = useState<string | null>(null);
   const [isSilsonSearching, setIsSilsonSearching] = useState(false);
-  const [isLmsProgress, setIsLmsProgress] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedLMS, setSelectedLMS] = useState<LMSMessage | null>(null);
   const [selectedCustomerForModal, setSelectedCustomerForModal] =
@@ -130,6 +137,9 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
   const [sentCustomerIds, setSentCustomerIds] = useState<Set<string>>(
     () => new Set(restoredRef.current?.sentCustomerIds ?? [])
   );
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [lmsGeneratingMsgId, setLmsGeneratingMsgId] = useState<string | null>(null);
+  const [apiAvailable, setApiAvailable] = useState<boolean | null>(null); // null = not checked
   const [toast, setToast] = useState<{ show: boolean; msg: string }>({
     show: false,
     msg: "",
@@ -138,15 +148,20 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const scrollRaf = useRef(0);
   const scrollToBottom = useCallback(() => {
-    const el = chatScrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    cancelAnimationFrame(scrollRaf.current);
+    scrollRaf.current = requestAnimationFrame(() => {
+      const el = chatScrollRef.current;
+      if (!el) return;
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    });
   }, []);
 
+  // Only scroll on messages change — other indicators (isAnalyzing, etc.) don't need competing scrolls
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isSilsonSearching, isLmsProgress, scrollToBottom]);
+  }, [messages, scrollToBottom]);
 
   useEffect(() => {
     // Chat state was already restored from sessionStorage in useState initializers
@@ -154,8 +169,10 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
       return;
     }
 
+    let cancelled = false;
+
     // Normal initialization (first login or no saved state)
-    setIsTyping(false);
+    setTypingMessage(null);
     setIsGenerating(false);
     setSentCustomerIds(new Set());
     setMessages([createGreetingMessage(fpProfile)]);
@@ -169,6 +186,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ stfno: fpProfile.employeeId }),
         });
+        if (cancelled) return;
         const data = (await res.json()) as { customers: Customer[]; totalCount: number };
         setTouchCustomers(data.customers);
 
@@ -185,6 +203,37 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
               timestamp: new Date(),
             },
           ]);
+
+          // AI 코멘트 분석 (초기 로드)
+          try {
+            setIsAnalyzing(true);
+            const analysisRes = await fetch("/api/analyze-customers", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                query: "오늘 터치 대상 고객",
+                customers: data.customers.map(c => ({
+                  name: c.name,
+                  gender: c.gender,
+                  age: c.age,
+                  event: c.event,
+                  urgency: c.urgency,
+                })),
+                intent: "all",
+              }),
+            });
+            if (cancelled) { setIsAnalyzing(false); return; }
+            const { analysis } = (await analysisRes.json()) as { analysis: string };
+            setIsAnalyzing(false);
+            if (analysis) {
+              setMessages(prev => [
+                ...prev,
+                { id: makeId(), role: "bot", type: "analysis", content: analysis, timestamp: new Date() },
+              ]);
+            }
+          } catch {
+            setIsAnalyzing(false);
+          }
         } else {
           setMessages([
             {
@@ -200,6 +249,19 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
     };
 
     loadDailyTouch();
+
+    // OpenAI API 헬스체크
+    fetch("/api/health")
+      .then((r) => r.json())
+      .then((d: { ok: boolean; error?: string }) => {
+        if (!cancelled) {
+          setApiAvailable(d.ok);
+          if (!d.ok) console.warn("[Health] OpenAI API unavailable:", d.error);
+        }
+      })
+      .catch(() => { if (!cancelled) setApiAvailable(false); });
+
+    return () => { cancelled = true; };
   }, [fpProfile]);
 
   useEffect(() => {
@@ -274,11 +336,11 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
   }, []);
 
   const handleUserInput = async (query: string) => {
-    if (!query.trim() || isTyping || isSilsonSearching) return;
+    if (!query.trim() || typingMessage || isSilsonSearching) return;
     track("chat_send", { query });
     addUserMessage(query);
     setInputValue("");
-    setIsTyping(true);
+    setTypingMessage(`"${query.length > 20 ? query.slice(0, 20) + '...' : query}" 조회 중`);
 
     try {
       const parsed = await parseQueryIntent(query);
@@ -290,7 +352,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
       if (parsed.raw) console.log("raw LLM  :", parsed.raw);
       console.groupEnd();
 
-      setIsTyping(false);
+      setTypingMessage(null);
       const params: QueryParams = parsed.params ?? {};
 
       if (parsed.intent === "off_topic") {
@@ -332,7 +394,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
 
           // LLM 분석 비동기 호출 (데이터가 있는 경우만)
           if (text && !text.includes("찾을 수 없습니다") && !text.includes("없습니다.")) {
-            setIsTyping(true);
+            setIsAnalyzing(true);
             try {
               const analysisRes = await fetch("/api/analyze-data", {
                 method: "POST",
@@ -340,12 +402,12 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
                 body: JSON.stringify({ query, dataText: text }),
               });
               const { analysis } = (await analysisRes.json()) as { analysis: string };
-              setIsTyping(false);
+              setIsAnalyzing(false);
               if (analysis) {
                 addBotMessage({ role: "bot", type: "analysis", content: analysis });
               }
             } catch {
-              setIsTyping(false);
+              setIsAnalyzing(false);
             }
           }
         } catch {
@@ -402,13 +464,42 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
       }
 
       addBotMessage({ role: "bot", type: "customer-list", content: botText, customers });
+
+      // AI 코멘트 분석 (고객이 있을 때만)
+      if (customers.length > 0) {
+        setIsAnalyzing(true);
+        try {
+          const analysisRes = await fetch("/api/analyze-customers", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              query,
+              customers: customers.map(c => ({
+                name: c.name,
+                gender: c.gender,
+                age: c.age,
+                event: c.event,
+                urgency: c.urgency,
+              })),
+              intent: parsed.intent,
+            }),
+          });
+          const { analysis } = (await analysisRes.json()) as { analysis: string };
+          setIsAnalyzing(false);
+          if (analysis) {
+            addBotMessage({ role: "bot", type: "analysis", content: analysis });
+          }
+        } catch {
+          setIsAnalyzing(false);
+        }
+      }
     } catch (err) {
       console.warn("[parse-query] 폴백 실행:", err);
       // 폴백: 전체 긴급도 순 반환
       const customers = [...touchCustomers].sort(
         (a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]
       );
-      setIsTyping(false);
+      setTypingMessage(null);
       addBotMessage({
         role: "bot",
         type: "customer-list",
@@ -426,7 +517,8 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
     addUserMessage(`${customer.name} 고객님의 정보를 확인하고 LMS 메시지를 작성해 주세요.`);
     await sleep(600);
 
-    // 고객 상세 정보 표시
+    // 고객 상세 정보 + LMS를 하나의 메시지로 표시
+    const msgId = makeId();
     const lastContactText = customer.lastContact
       ? `최근 컨택: ${customer.lastContact}`
       : "최근 컨택: 없음 (미접촉 고객)";
@@ -434,44 +526,146 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
       ? `\n📦 보유 상품 ${customer.products.length}건:\n${customer.products.map((p) => `• ${p.name} (${p.contractNo})`).join("\n")}`
       : `\n📦 장기 ${customer.longTermCount}건 / 자동차 ${customer.carCount}건`;
 
-    addBotMessage({
-      role: "bot",
-      type: "customer-info",
-      content: `📋 ${customer.name} 고객 정보\n\n👤 ${customer.gender}성, ${customer.age}세 (${customer.birthDate})\n🎯 이벤트: ${customer.event}\n📌 ${customer.eventDetail}${productSection}\n\n⏰ ${lastContactText}\n⚡ 긴급도: ${urgencyLabel[customer.urgency]}`,
-      customerContext: customer,
-    });
+    // 고객 정보 카드 먼저 표시
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: msgId,
+        role: "bot" as const,
+        type: "customer-info" as const,
+        content: `📋 ${customer.name} 고객 정보\n\n👤 ${customer.gender}성, ${customer.age}세 (${customer.birthDate})\n🎯 이벤트: ${customer.event}\n📌 ${customer.eventDetail}${productSection}\n\n⏰ ${lastContactText}\n⚡ 긴급도: ${urgencyLabel[customer.urgency]}`,
+        customerContext: customer,
+        timestamp: new Date(),
+      },
+    ]);
 
-    // 고객 정보를 읽을 시간 확보 후 LMS 진행 표시기
-    await sleep(1200);
-    setIsLmsProgress(true);
+    // API 사용 가능 여부 확인 후 LMS 생성
+    await sleep(800);
+
+    if (apiAvailable === false) {
+      // API 불가 — 에러 메시지를 카드 내에 표시
+      setMessages((prev) => prev.map((m) =>
+        m.id === msgId ? { ...m, lmsError: "OpenAI API 연결이 불가하여 LMS 메시지를 생성할 수 없습니다. API 키를 확인해주세요." } : m
+      ));
+      setIsGenerating(false);
+      return;
+    }
+
+    setLmsGeneratingMsgId(msgId);
 
     try {
       const lmsMessages = await generateLMSViaAI(customer, fpProfile.name);
-      setIsLmsProgress(false);
-      addBotMessage({
-        role: "bot",
-        type: "lms-list",
-        content: `AI가 ${customer.name} 고객님께 최적화된 LMS 메시지 3종을 생성했습니다. (${customer.event} 기반) 원하시는 메시지를 선택해주세요.`,
-        lmsMessages,
-        customerContext: customer,
-      });
+      setLmsGeneratingMsgId(null);
+      setMessages((prev) => prev.map((m) =>
+        m.id === msgId ? { ...m, lmsMessages, customerContext: customer } : m
+      ));
     } catch (err) {
-      console.warn("[LMS] AI generation failed, falling back:", err);
-      // 폴백: 정적 더미 데이터 사용
-      await sleep(800);
-      setIsLmsProgress(false);
+      console.warn("[LMS] AI generation failed:", err);
+      setLmsGeneratingMsgId(null);
+      const errMsg = err instanceof Error ? err.message : "";
+      const isAuthError = errMsg.includes("401") || errMsg.includes("API key");
+      if (isAuthError) setApiAvailable(false);
+
       const fallback = LMS_MESSAGES[customer.id] ?? [];
-      addBotMessage({
-        role: "bot",
-        type: "lms-list",
-        content: `${customer.name} 고객님께 보낼 LMS 메시지 3종입니다. 원하시는 메시지를 선택해주세요.`,
-        lmsMessages: fallback,
-        customerContext: customer,
-      });
+      setMessages((prev) => prev.map((m) =>
+        m.id === msgId
+          ? {
+              ...m,
+              ...(fallback.length > 0
+                ? { lmsMessages: fallback, customerContext: customer }
+                : { lmsError: isAuthError
+                    ? "OpenAI API 키가 유효하지 않아 LMS를 생성할 수 없습니다."
+                    : "LMS 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+                }),
+            }
+          : m
+      ));
     } finally {
       setIsGenerating(false);
     }
-  }, [isGenerating, addUserMessage, addBotMessage]);
+  }, [isGenerating, addUserMessage, fpProfile.name]);
+
+
+  // LMS generation from data-card (topic-based, minimal customer info)
+  const handleDataCardLMS = useCallback(async (info: LMSSendInfo) => {
+    if (isGenerating) return;
+    track("data_card_lms", { name: info.name, topic: info.topic });
+    setIsGenerating(true);
+
+    addUserMessage(`${info.name} 고객님께 "${info.topic}" 주제로 LMS 메시지를 작성해 주세요.`);
+    await sleep(600);
+
+    // Build a minimal Customer object for the customer-info card
+    const minimalCustomer: Customer = {
+      id: `csv-${info.name}-${Date.now()}`,
+      name: info.name,
+      gender: info.gender as Customer["gender"],
+      age: info.age,
+      birthDate: "",
+      event: info.topic as Customer["event"],
+      eventDetail: `${info.topic} 주제 맞춤 LMS`,
+      products: [],
+      urgency: "normal",
+      lastContact: null,
+      contactHistory: [],
+      longTermCount: 0,
+      carCount: 0,
+    };
+
+    const msgId = makeId();
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: msgId,
+        role: "bot" as const,
+        type: "customer-info" as const,
+        content: `📋 ${info.name} 고객 · ${info.topic}\n\n👤 ${info.gender}성, ${info.age}세\n🎯 주제: ${info.topic}`,
+        customerContext: minimalCustomer,
+        timestamp: new Date(),
+      },
+    ]);
+
+    await sleep(800);
+    setLmsGeneratingMsgId(msgId);
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 35_000);
+      const res = await fetch("/api/generate-lms-topic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: info.name,
+          gender: info.gender,
+          age: info.age,
+          topic: info.topic,
+          fpName: fpProfile.name,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (!res.ok) throw new Error(`API ${res.status}`);
+      const data = (await res.json()) as { messages: LMSMessage[] };
+      setLmsGeneratingMsgId(null);
+
+      if (data.messages?.length > 0) {
+        setMessages((prev) => prev.map((m) =>
+          m.id === msgId ? { ...m, lmsMessages: data.messages, customerContext: minimalCustomer } : m
+        ));
+      } else {
+        throw new Error("Empty response");
+      }
+    } catch (err) {
+      console.warn("[LMS-topic] Generation failed:", err);
+      setLmsGeneratingMsgId(null);
+      setMessages((prev) => prev.map((m) =>
+        m.id === msgId ? { ...m, lmsError: "LMS 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요." } : m
+      ));
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [isGenerating, addUserMessage, fpProfile.name]);
 
   const handleLMSSelect = (lms: LMSMessage, customer: Customer) => {
     track("lms_select", { messageType: lms.type, customerId: customer.id });
@@ -489,9 +683,9 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
     addUserMessage(`${selectedCustomerForModal.name} 고객님께 보낼 ${message.type} 메시지를 메시지 앱으로 전달했습니다.`);
     showToastMsg(`${selectedCustomerForModal.name} 고객님 메시지가 메시지 앱으로 전달되었습니다.`);
 
-    setIsTyping(true);
+    setTypingMessage(`${selectedCustomerForModal.name} 고객님 발송 결과 확인 중`);
     setTimeout(() => {
-      setIsTyping(false);
+      setTypingMessage(null);
       addBotMessage({
         role: "bot",
         type: "text",
@@ -526,7 +720,7 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
     handleUserInput(inputValue);
   };
 
-  const busy = isTyping || isSilsonSearching || isLmsProgress || isGenerating;
+  const busy = !!typingMessage || isSilsonSearching || isGenerating;
   const showQuickScrollHint = QUICK_ACTIONS.length > 4;
 
   return (
@@ -573,13 +767,33 @@ export default function ChatWindow({ fpProfile }: ChatWindowProps) {
               onCustomerSelect={handleCustomerSelect}
               onLMSSelect={handleLMSSelect}
               onFollowUpClick={handleUserInput}
+              onDataCardLMS={handleDataCardLMS}
               sentCustomerIds={sentCustomerIds}
+              lmsGeneratingMsgId={lmsGeneratingMsgId}
             />
           ))}
 
-          {isTyping && <TypingIndicator />}
+          {(typingMessage || isAnalyzing) && (
+            <div className="flex items-start gap-2 mb-4">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 shadow-sm">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#C2571A" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="7" x2="12" y2="3" /><circle cx="12" cy="2.5" r="1" fill="#C2571A" stroke="none" />
+                  <rect x="4" y="7" width="16" height="13" rx="2.5" /><circle cx="9" cy="12" r="1.5" fill="#C2571A" stroke="none" /><circle cx="15" cy="12" r="1.5" fill="#C2571A" stroke="none" />
+                  <path d="M9 16.5 Q12 15 15 16.5" strokeWidth="1.5" /><line x1="4" y1="12" x2="2" y2="12" /><line x1="20" y1="12" x2="22" y2="12" />
+                </svg>
+              </div>
+              <div className="flex flex-col items-start">
+                <span className="text-[11px] font-semibold text-hanwha-navy/60 ml-0.5 mb-1">AI 영업비서</span>
+                <div className="flex items-center gap-2 bg-white rounded-xl border border-gray-100 shadow-sm px-3.5 py-2.5">
+                  <span className="w-3.5 h-3.5 rounded-full border-2 border-hanwha-orange/30 border-t-hanwha-orange animate-spin shrink-0" />
+                  <span className="text-[12px] text-hanwha-navy font-medium">
+                    {isAnalyzing ? "고객 데이터 분석 중" : typingMessage}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
           {isSilsonSearching && <StepProgressIndicator steps={SILSON_STEPS} />}
-          {isLmsProgress && <StepProgressIndicator steps={LMS_STEPS} />}
 
           <div />
         </div>

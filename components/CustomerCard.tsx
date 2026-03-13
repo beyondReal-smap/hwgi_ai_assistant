@@ -187,6 +187,7 @@ const CustomerCard = memo(function CustomerCard({ customer, onSelect, index, isS
           {isSent ? "재발송 →" : "상세보기 →"}
         </div>
       </div>
+
     </motion.div>
   );
 });

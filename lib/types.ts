@@ -110,6 +110,7 @@ export interface ChatMessage {
   followUps?: string[];
   customers?: Customer[];
   lmsMessages?: LMSMessage[];
+  lmsError?: string;
   customerContext?: Customer;
   timestamp: Date;
 }
@@ -126,4 +127,11 @@ export interface TodoItem {
   text: string;
   done: boolean;
   urgency?: UrgencyLevel;
+}
+
+export interface InlineLMSState {
+  messageId: string | null;
+  customer: Customer | null;
+  lmsMessages: LMSMessage[];
+  isGenerating: boolean;
 }

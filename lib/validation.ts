@@ -76,6 +76,19 @@ export const AnalyzeDataSchema = z.object({
   dataText: z.string().max(10000),
 });
 
+/** POST /api/analyze-customers */
+export const AnalyzeCustomersSchema = z.object({
+  query: z.string().max(500),
+  customers: z.array(z.object({
+    name: z.string(),
+    gender: z.string(),
+    age: z.number(),
+    event: z.string(),
+    urgency: z.string(),
+  })).max(100),
+  intent: z.string().max(100),
+});
+
 /** POST /api/silson-search & /api/jobcode-search */
 export const ProxySearchSchema = z.object({
   query: z.string().min(1).max(500),

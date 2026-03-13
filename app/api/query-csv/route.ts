@@ -9,11 +9,8 @@ import {
   getGoodsDetailByCustomer,
   getCustomerProducts,
   getCoveragesExpiringSoon,
-  searchByProductName,
-  searchByCoverageName,
   getCustomersByGender,
   getCustomersByAge,
-  getCustomersByWorkplace,
   getCustomersWithMarketingConsent,
   getCustomersByBirthMonth,
   formatDate,
@@ -22,6 +19,11 @@ import {
   type CsvCustomer,
   type CsvGoodsDetail,
 } from "@/lib/csv-data";
+import {
+  searchCustomersBySemanticWorkplace,
+  searchGoodsBySemanticCoverage,
+  searchGoodsBySemanticProduct,
+} from "@/lib/customer-semantic-search";
 
 // ─── Table Formatter ─────────────────────────────────────
 
@@ -33,17 +35,34 @@ function buildTable(headers: string[], rows: string[][]): string {
   return [headerLine, divider, ...dataLines].join("\n");
 }
 
+/** Deterministic fake phone number from customer name (seed-based) */
+function fakePhone(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  const n = Math.abs(h);
+  const mid = String(n % 10000).padStart(4, "0");
+  const tail = String((n >>> 4) % 10000).padStart(4, "0");
+  return `010-${mid}-${tail}`;
+}
+
 function customerTable(customers: CsvCustomer[]): string {
-  const headers = ["#", "이름", "성별", "나이", "생년월일", "직장", "마케팅"];
+  const headers = ["#", "이름", "성별", "나이", "생년월일", "직장", "연락처"];
   const rows = customers.map((c, i) => {
     const age = calculateAge(c.birthYear);
     const sex = genderLabel(c.gender);
     const birth = `${c.birthYear}-${c.birthMndy.slice(0, 2)}-${c.birthMndy.slice(2, 4)}`;
     const wp = c.workplace || "-";
-    const mkt = c.marketingConsent === "Y" ? "O" : "-";
-    return [String(i + 1), c.customerName, sex, String(age), birth, wp, mkt];
+    const phone = fakePhone(c.customerName);
+    return [String(i + 1), c.customerName, sex, String(age), birth, wp, phone];
   });
   return buildTable(headers, rows);
+}
+
+function semanticHint(keyword: string, matchedTerms: string[]): string {
+  const normalizedKeyword = keyword.replace(/\s+/g, "").toLowerCase();
+  const aliases = matchedTerms.filter((term) => term.replace(/\s+/g, "").toLowerCase() !== normalizedKeyword);
+  if (aliases.length === 0) return "";
+  return `\n\n유사 매칭: ${aliases.slice(0, 4).join(", ")}`;
 }
 
 // ─── Format Functions ────────────────────────────────────
@@ -93,13 +112,17 @@ function formatAgeFilter(ageMin: number, ageMax: number, fpName?: string): strin
   return `👤 ${label} 고객${scope} (${customers.length}명)\n\n${customerTable(customers)}`;
 }
 
-function formatWorkplaceSearch(keyword: string, fpName?: string): string {
-  const customers = getCustomersByWorkplace(keyword, fpName);
+function formatWorkplaceSearch(
+  keyword: string,
+  customers: CsvCustomer[],
+  matchedTerms: string[],
+  fpName?: string,
+): string {
   const scope = fpName ? ` (${fpName} FP)` : "";
   if (customers.length === 0) {
     return `"${keyword}" 관련 직장 고객을 찾을 수 없습니다.${scope}`;
   }
-  return `🏢 "${keyword}" 직장 고객${scope} (${customers.length}명)\n\n${customerTable(customers)}`;
+  return `🏢 "${keyword}" 직장 고객${scope} (${customers.length}명)${semanticHint(keyword, matchedTerms)}\n\n${customerTable(customers)}`;
 }
 
 function formatMarketingConsent(fpName?: string): string {
@@ -197,8 +220,7 @@ function formatExpiryCoverage(months: number): string {
   return `📅 ${months}개월 이내 만기 도래 담보 (${coverages.length}건, 증권 ${policySet.size}건)\n\n${table}`;
 }
 
-function formatProductSearch(keyword: string): string {
-  const details = searchByProductName(keyword);
+function formatProductSearch(keyword: string, details: CsvGoodsDetail[], matchedTerms: string[]): string {
   if (details.length === 0) {
     return `"${keyword}" 관련 상품 가입 내역을 찾을 수 없습니다.`;
   }
@@ -219,11 +241,10 @@ function formatProductSearch(keyword: string): string {
     tableRows.push([name, items[0].productName, cvrNames]);
   }
 
-  return `🔍 "${keyword}" 상품 가입 현황 (고객 ${customerSet.size}명, 증권 ${policySet.size}건)\n\n${buildTable(["고객명", "상품명", "주요 담보"], tableRows)}`;
+  return `🔍 "${keyword}" 상품 가입 현황 (고객 ${customerSet.size}명, 증권 ${policySet.size}건)${semanticHint(keyword, matchedTerms)}\n\n${buildTable(["고객명", "상품명", "주요 담보"], tableRows)}`;
 }
 
-function formatCoverageSearch(keyword: string): string {
-  const details = searchByCoverageName(keyword);
+function formatCoverageSearch(keyword: string, details: CsvGoodsDetail[], matchedTerms: string[]): string {
   if (details.length === 0) {
     return `"${keyword}" 관련 담보 가입 내역을 찾을 수 없습니다.`;
   }
@@ -243,7 +264,7 @@ function formatCoverageSearch(keyword: string): string {
     tableRows.push([name, products, items[0].coverageName, `${formatDate(items[0].insuranceStart)}~${formatDate(items[0].insuranceEnd)}`]);
   }
 
-  return `🔍 "${keyword}" 담보 가입 현황 (고객 ${customerSet.size}명, 담보 ${details.length}건)\n\n${buildTable(["고객명", "상품명", "담보명", "보험기간"], tableRows)}`;
+  return `🔍 "${keyword}" 담보 가입 현황 (고객 ${customerSet.size}명, 담보 ${details.length}건)${semanticHint(keyword, matchedTerms)}\n\n${buildTable(["고객명", "상품명", "담보명", "보험기간"], tableRows)}`;
 }
 
 // ─── Route Handler ───────────────────────────────────────
@@ -309,9 +330,12 @@ export async function POST(req: NextRequest) {
         break;
       }
       case "workplace_search":
-        text = params?.keyword
-          ? formatWorkplaceSearch(params.keyword, fp)
-          : "직장명을 입력해주세요. (예: \"삼성전자 고객\")";
+        if (params?.keyword) {
+          const result = await searchCustomersBySemanticWorkplace(params.keyword, fp);
+          text = formatWorkplaceSearch(params.keyword, result.items, result.matchedTerms, fp);
+        } else {
+          text = "직장명을 입력해주세요. (예: \"삼성전자 고객\")";
+        }
         break;
       case "marketing_consent":
         text = formatMarketingConsent(fp);
@@ -334,14 +358,20 @@ export async function POST(req: NextRequest) {
         text = formatExpiryCoverage(params?.months ?? 12);
         break;
       case "product_search":
-        text = params?.keyword
-          ? formatProductSearch(params.keyword)
-          : "검색할 상품명을 입력해주세요. (예: \"암보험 가입 현황\")";
+        if (params?.keyword) {
+          const result = await searchGoodsBySemanticProduct(params.keyword);
+          text = formatProductSearch(params.keyword, result.items, result.matchedTerms);
+        } else {
+          text = "검색할 상품명을 입력해주세요. (예: \"암보험 가입 현황\")";
+        }
         break;
       case "coverage_search":
-        text = params?.keyword
-          ? formatCoverageSearch(params.keyword)
-          : "검색할 담보명을 입력해주세요. (예: \"사망보험금 가입자\")";
+        if (params?.keyword) {
+          const result = await searchGoodsBySemanticCoverage(params.keyword);
+          text = formatCoverageSearch(params.keyword, result.items, result.matchedTerms);
+        } else {
+          text = "검색할 담보명을 입력해주세요. (예: \"사망보험금 가입자\")";
+        }
         break;
       default:
         text = "지원하지 않는 조회 유형입니다.";

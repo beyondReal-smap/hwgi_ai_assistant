@@ -55,24 +55,24 @@ function createResponse(overrides: Partial<SilsonSearchResponse> = {}): SilsonSe
 }
 
 describe("buildSilsonCards", () => {
-  it("uses structured answers to build multiple silson cards", () => {
+  it("uses structured answers to build a combined silson card", () => {
     const cards = buildSilsonCards("4세대 치과 치료 보상되나요?", createResponse());
 
-    expect(cards).toHaveLength(4);
+    expect(cards).toHaveLength(1);
     expect(cards[0].title).toBe("실손 AI 답변");
-    expect(cards[0].content).toContain("한눈에 요약");
-    expect(cards[1].title).toBe("보상 포인트");
-    expect(cards[2].title).toBe("주의할 점");
-    expect(cards[3].title).toBe("상담 체크포인트");
-    expect(cards[3].sources).toContain("4세대 | 기본형 | 치과 치료 보상 기준");
-    expect(cards[3].followUps).toEqual(["비급여 치과 치료는 어떻게 되나요?"]);
+    expect(cards[0].content).toContain("핵심 요약");
+    expect(cards[0].content).toContain("보상 포인트");
+    expect(cards[0].content).toContain("주의할 점");
+    expect(cards[0].content).toContain("상담 체크포인트");
+    expect(cards[0].sources).toContain("4세대 | 기본형 | 치과 치료 보상 기준");
+    expect(cards[0].followUps).toEqual(["비급여 치과 치료는 어떻게 되나요?"]);
   });
 
   it("falls back to raw answer parsing when structured answer is missing", () => {
     const cards = buildSilsonCards("4세대 치과 치료 보상되나요?", createResponse({ structured_answer: null }));
 
     expect(cards).toHaveLength(1);
-    expect(cards[0].title).toBe("실손 검색 결과");
+    expect(cards[0].title).toBe("실손 AI 답변");
     expect(cards[0].content).toContain("치과 치료는 급여 항목 위주로 확인이 필요합니다.");
   });
 });

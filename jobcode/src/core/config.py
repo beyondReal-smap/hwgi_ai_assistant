@@ -6,6 +6,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+# Load shared .env.local from Next.js project root, then local .env overrides
+_project_root = Path(__file__).resolve().parents[3]
+load_dotenv(_project_root / ".env.local")
 load_dotenv()
 
 
@@ -14,6 +17,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 ARTIFACT_DIR = PROJECT_ROOT / "artifacts"
 BM25_DIR = ARTIFACT_DIR / "bm25"
 EMBED_DIR = ARTIFACT_DIR / "embed"
+OPENAI_EMBED_DIR = ARTIFACT_DIR / "openai_embed"
 
 JOBS_CSV = DATA_DIR / "jobs.csv"
 JOB_CODE_TXT = DATA_DIR / "job_code.txt"
@@ -29,7 +33,7 @@ SILSON_DOCS_DIR = SILSON_RAG_DIR / "search_docs_md"
 SILSON_CLAUSE_MANIFEST_CSV = SILSON_RAG_DIR / "openai_upload_clause_manifest.csv"
 SILSON_CLAUSE_DOCS_DIR = SILSON_RAG_DIR / "search_clause_docs_md"
 
-for _p in (DATA_DIR, BM25_DIR, EMBED_DIR):
+for _p in (DATA_DIR, BM25_DIR, EMBED_DIR, OPENAI_EMBED_DIR):
     _p.mkdir(parents=True, exist_ok=True)
 
 
@@ -60,9 +64,12 @@ class Settings:
     use_cross_encoder_default: bool = _env_bool("USE_CROSS_ENCODER", True)
     use_llm_default: bool = _env_bool("USE_LLM", False)
     use_query_expansion: bool = _env_bool("USE_QUERY_EXPANSION", False)
+    embed_provider: str = os.getenv("EMBED_PROVIDER", "auto").strip().lower() or "auto"
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     openai_base_url: str = os.getenv("OPENAI_BASE_URL", "")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    openai_embed_model: str = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+    openai_embed_dimensions: int = _env_int("OPENAI_EMBEDDING_DIMENSIONS", 0)
     embed_model_name: str = os.getenv("EMBED_MODEL_NAME", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
     cross_encoder_model_name: str = os.getenv(
         "CROSS_ENCODER_MODEL_NAME", "cross-encoder/ms-marco-MiniLM-L-6-v2"

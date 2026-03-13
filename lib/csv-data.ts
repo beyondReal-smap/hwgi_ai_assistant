@@ -150,6 +150,7 @@ const FUZZY_THRESHOLD = 0.6;
 // 고유 상품명 / 담보명 인덱스 (로드 시 1회 구축)
 const UNIQUE_PRODUCT_NAMES = [...new Set(GOODS_DETAIL_LIST.map((g) => g.productName).filter(Boolean))];
 const UNIQUE_COVERAGE_NAMES = [...new Set(GOODS_DETAIL_LIST.map((g) => g.coverageName).filter(Boolean))];
+const UNIQUE_WORKPLACE_NAMES = [...new Set(CUSTOMER_LIST.map((customer) => customer.workplace).filter(Boolean))];
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -203,6 +204,17 @@ export function getCustomersByAge(ageMin: number, ageMax: number, fpName?: strin
 // 직장명 검색
 export function getCustomersByWorkplace(keyword: string, fpName?: string): CsvCustomer[] {
   return filterByFP(CUSTOMER_LIST, fpName).filter((c) => c.workplace && c.workplace.includes(keyword));
+}
+
+export function getCustomersByWorkplaces(workplaces: string[], fpName?: string): CsvCustomer[] {
+  const matched = new Set(workplaces.filter(Boolean));
+  if (matched.size === 0) return [];
+  return filterByFP(CUSTOMER_LIST, fpName)
+    .filter((customer) => customer.workplace && matched.has(customer.workplace))
+    .sort((left, right) =>
+      left.customerName.localeCompare(right.customerName, "ko")
+      || left.workplace.localeCompare(right.workplace, "ko")
+    );
 }
 
 // 마케팅 동의 고객
@@ -305,6 +317,30 @@ export function searchByCoverageName(keyword: string): CsvGoodsDetail[] {
   }
   if (matched.size === 0) return [];
   return GOODS_DETAIL_LIST.filter((g) => matched.has(g.coverageName));
+}
+
+export function getGoodsDetailsByProductNames(productNames: string[]): CsvGoodsDetail[] {
+  const matched = new Set(productNames.filter(Boolean));
+  if (matched.size === 0) return [];
+  return GOODS_DETAIL_LIST.filter((detail) => matched.has(detail.productName));
+}
+
+export function getGoodsDetailsByCoverageNames(coverageNames: string[]): CsvGoodsDetail[] {
+  const matched = new Set(coverageNames.filter(Boolean));
+  if (matched.size === 0) return [];
+  return GOODS_DETAIL_LIST.filter((detail) => matched.has(detail.coverageName));
+}
+
+export function getUniqueWorkplaceNames(): string[] {
+  return UNIQUE_WORKPLACE_NAMES;
+}
+
+export function getUniqueProductNames(): string[] {
+  return UNIQUE_PRODUCT_NAMES;
+}
+
+export function getUniqueCoverageNames(): string[] {
+  return UNIQUE_COVERAGE_NAMES;
 }
 
 export { formatDate, calculateAge, genderLabel };

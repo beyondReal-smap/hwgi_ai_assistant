@@ -46,3 +46,7 @@ next-env.d.ts
 __pycache__/
 **/__pycache__/
 *.pyc
+
+# runtime embedding caches
+/artifacts/openai-embeddings/
+/jobcode/artifacts/openai_embed/
